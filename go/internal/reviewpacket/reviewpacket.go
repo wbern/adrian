@@ -3,6 +3,10 @@
 package reviewpacket
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/wbern/adr-lint/go/internal/adr"
@@ -27,6 +31,7 @@ type Input struct {
 // Plan records both reviewable packets and deterministic exclusions.
 type Plan struct {
 	SchemaVersion string    `json:"schemaVersion"`
+	PlanSHA256    string    `json:"planSha256"`
 	Packets       []Packet  `json:"packets"`
 	Skipped       []Skipped `json:"skipped"`
 	Limits        Limits    `json:"limits"`
@@ -128,7 +133,30 @@ func Build(inputs []Input, options Options) Plan {
 		}
 	}
 	plan.Limits.PacketLimitExceeded = options.MaxPackets > 0 && len(plan.Packets) > options.MaxPackets
+	plan.PlanSHA256 = hashPlan(plan)
 	return plan
+}
+
+func hashPlan(plan Plan) string {
+	plan.PlanSHA256 = ""
+	payload, err := json.Marshal(plan)
+	if err != nil {
+		panic("reviewpacket: marshal plan hash: " + err.Error())
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
+}
+
+// ValidatePlan rejects a plan whose serialized packet inventory no longer
+// matches the hash produced by Build.
+func ValidatePlan(plan Plan) error {
+	if plan.PlanSHA256 == "" {
+		return fmt.Errorf("planSha256 is required")
+	}
+	if got := hashPlan(plan); got != plan.PlanSHA256 {
+		return fmt.Errorf("planSha256 mismatch")
+	}
+	return nil
 }
 
 func filesForChunk(diff string, fallback []string) []string {

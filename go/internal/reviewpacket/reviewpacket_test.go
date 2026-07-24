@@ -275,6 +275,26 @@ index 1111111..2222222 100644
 	}
 }
 
+func TestBuildAssignsStablePlanHash(t *testing.T) {
+	input := []Input{{
+		ADR: adr.ADR{
+			ID: "37", Title: "Tokens", Complexity: adr.ComplexityLite,
+			Decision: "Use tokens.", PreFilter: []string{"token"},
+		},
+		Files: []string{"src/theme.css"},
+		Diff:  "diff --git a/src/theme.css b/src/theme.css\n@@ -1 +1 @@\n+color: token;\n",
+	}}
+
+	first := Build(input, Options{MaxTokensPerChunk: 512})
+	second := Build(input, Options{MaxTokensPerChunk: 512})
+	if first.PlanSHA256 == "" {
+		t.Fatal("PlanSHA256 should be populated")
+	}
+	if first.PlanSHA256 != second.PlanSHA256 {
+		t.Errorf("plan hashes differ: %q != %q", first.PlanSHA256, second.PlanSHA256)
+	}
+}
+
 func sameStrings(got, want []string) bool {
 	if len(got) != len(want) {
 		return false

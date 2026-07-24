@@ -18,6 +18,7 @@ import (
 	"github.com/wbern/adr-lint/go/internal/dotenv"
 	"github.com/wbern/adr-lint/go/internal/gitcontext"
 	"github.com/wbern/adr-lint/go/internal/listcmd"
+	"github.com/wbern/adr-lint/go/internal/planexec"
 	"github.com/wbern/adr-lint/go/internal/rejectcmd"
 	"github.com/wbern/adr-lint/go/internal/runner"
 	"github.com/wbern/adr-lint/go/internal/showcmd"
@@ -29,16 +30,17 @@ import (
 )
 
 var subcommands = map[string]dispatcher.Command{
-	"create":    {Run: createcmd.Run, Usage: "adr-lint create <title>"},
-	"show":      {Run: showcmd.Run, Usage: "adr-lint show <id>"},
-	"accept":    {Run: acceptcmd.Run, Usage: "adr-lint accept <id>"},
-	"reject":    {Run: rejectcmd.Run, Usage: "adr-lint reject <id>"},
-	"withdraw":  {Run: withdrawcmd.Run, Usage: "adr-lint withdraw <id>"},
-	"deprecate": {Run: deprecatecmd.Run, Usage: "adr-lint deprecate <id>"},
-	"supersede": {Run: supersedecmd.Run, Usage: "adr-lint supersede <old-id> <new-id>"},
-	"version":   {Run: versioncmd.Run, Usage: "adr-lint version"},
-	"list":      {Run: listcmd.Run, Usage: "adr-lint list"},
-	"validate":  {Run: validatecmd.Run, Usage: "adr-lint validate"},
+	"create":       {Run: createcmd.Run, Usage: "adr-lint create <title>"},
+	"show":         {Run: showcmd.Run, Usage: "adr-lint show <id>"},
+	"accept":       {Run: acceptcmd.Run, Usage: "adr-lint accept <id>"},
+	"reject":       {Run: rejectcmd.Run, Usage: "adr-lint reject <id>"},
+	"withdraw":     {Run: withdrawcmd.Run, Usage: "adr-lint withdraw <id>"},
+	"deprecate":    {Run: deprecatecmd.Run, Usage: "adr-lint deprecate <id>"},
+	"supersede":    {Run: supersedecmd.Run, Usage: "adr-lint supersede <old-id> <new-id>"},
+	"version":      {Run: versioncmd.Run, Usage: "adr-lint version"},
+	"list":         {Run: listcmd.Run, Usage: "adr-lint list"},
+	"validate":     {Run: validatecmd.Run, Usage: "adr-lint validate"},
+	"execute-plan": {Run: planexec.RunCommand, Usage: "adr-lint execute-plan --plan <plan.json> --adapter <executable>"},
 }
 
 func main() {

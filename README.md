@@ -7,7 +7,7 @@
 
 <h1 align="center">ADR Lint</h1>
 
-<p align="center">Automatically validates code changes against Architecture Decision Records (ADRs) using Claude as the analysis backend.</p>
+<p align="center">Mechanically scopes Architecture Decision Record (ADR) review inputs for any analysis backend.</p>
 
 <p align="center">
   <a href="https://github.com/wbern/adr-lint/actions/workflows/ci.yml"><img src="https://github.com/wbern/adr-lint/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -46,12 +46,13 @@ For each lint run:
    pre-filter strings appear anywhere in the diff, the LLM call is skipped
    entirely and the ADR passes. This is the difference between a free
    re-run and a paid one.
-4. **Ask Claude** — surviving ADRs are sent to the Claude Code CLI with
-   the diff. The model returns pass/fail + location + a fix.
+4. **Emit a review plan** — surviving ADRs become bounded, ordered review
+   packets. A separate adapter may analyse each packet.
 
-The Claude CLI is the analysis backend — there's no API key plumbing, the
-tool shells out to `claude` and inherits whatever auth your account
-already has.
+The original `adr-lint` command is retained as a legacy Claude-backed lint
+mode: it shells out to `claude` and inherits that CLI's existing auth. The
+model-neutral review-plan and execute-plan flow below neither selects a model
+nor starts one.
 
 ## Quickstart
 
@@ -283,6 +284,23 @@ With `diff_context: false`, matching hunks stay separate. With
 they fit. The planner uses three lines of unified-diff context rather than
 function-wide context, keeping a CSS file or long function from consuming the
 review window merely because one line matched a pre-filter.
+
+### Execute a review plan mechanically
+
+```bash
+adr-lint execute-plan --plan review-plan.json --adapter /path/to/packet-adapter
+```
+
+`execute-plan` verifies the plan hash and rejects an over-limit plan before it
+starts the adapter. It then sends every planned packet, in plan order, as one
+JSON document on the adapter's standard input. The adapter returns one JSON
+document on standard output. ADR Lint records those opaque results in a JSON
+run receipt; it does not inspect model names, choose prompts, or let an agent
+drop packets. The first adapter failure stops the run and returns an error.
+
+The adapter is deliberately a separate concern. A CI job or durable review
+runner chooses the adapter and preserves resume state; ADR Lint only produces
+and executes the immutable packet inventory.
 
 ## Integration
 
