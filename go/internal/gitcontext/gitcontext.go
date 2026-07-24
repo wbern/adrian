@@ -6,6 +6,7 @@ package gitcontext
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -120,6 +121,25 @@ func (c *Client) GetDiffAgainstMainForFiles(files []string, targetRef string, in
 	return out
 }
 
+// GetDiffAgainstMainForFilesWithContextLines returns a unified diff with a
+// bounded number of surrounding lines per hunk. It avoids function-wide
+// context when a downstream reviewer has a strict context budget.
+func (c *Client) GetDiffAgainstMainForFilesWithContextLines(files []string, targetRef string, contextLines int) string {
+	if len(files) == 0 || contextLines < 0 {
+		return ""
+	}
+	diffRange, err := c.getDiffRange(targetRef)
+	if err != nil {
+		return ""
+	}
+	args := append([]string{"diff", fmt.Sprintf("-U%d", contextLines), diffRange, "--"}, files...)
+	out, err := c.run(args)
+	if err != nil {
+		return ""
+	}
+	return out
+}
+
 // GetStagedFiles returns the names of currently-staged files.
 func (c *Client) GetStagedFiles() []string {
 	out, err := c.run([]string{"diff", "--cached", "--name-only"})
@@ -166,6 +186,20 @@ func (c *Client) GetStagedDiffForFiles(files []string, includeContext bool) stri
 		flag = "-U0"
 	}
 	args := append([]string{"diff", "--cached", flag, "--"}, files...)
+	out, err := c.run(args)
+	if err != nil {
+		return ""
+	}
+	return out
+}
+
+// GetStagedDiffForFilesWithContextLines returns a staged unified diff with a
+// bounded number of surrounding lines per hunk.
+func (c *Client) GetStagedDiffForFilesWithContextLines(files []string, contextLines int) string {
+	if len(files) == 0 || contextLines < 0 {
+		return ""
+	}
+	args := append([]string{"diff", "--cached", fmt.Sprintf("-U%d", contextLines), "--"}, files...)
 	out, err := c.run(args)
 	if err != nil {
 		return ""

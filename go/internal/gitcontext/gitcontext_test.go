@@ -158,6 +158,23 @@ func TestGetDiffAgainstMainForFiles_DefaultsToWContextFlag(t *testing.T) {
 	}
 }
 
+func TestGetDiffAgainstMainForFilesWithContextLines_UsesRequestedContext(t *testing.T) {
+	rr := newDefaultRunner("diff output")
+	c := NewClient(rr.Run)
+
+	c.GetDiffAgainstMainForFilesWithContextLines([]string{"pkg/foo.go"}, "", 3)
+
+	call := findCall(rr, func(args []string) bool {
+		return slices.Contains(args, "--") && !slices.Contains(args, "--cached")
+	})
+	if call == nil {
+		t.Fatalf("expected a diff call, got %v", rr.calls)
+	}
+	if !slices.Contains(call, "-U3") {
+		t.Errorf("expected -U3 in args, got %v", call)
+	}
+}
+
 func TestGetStagedDiffForFiles_IncludeContextFalseUsesU0(t *testing.T) {
 	rr := newDefaultRunner("diff output")
 	c := NewClient(rr.Run)

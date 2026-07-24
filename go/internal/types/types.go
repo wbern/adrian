@@ -51,17 +51,20 @@ type TokenUsage struct {
 // HEAD"; BranchSet=true with BranchRef set means "branch mode against
 // the named ref".
 type LintOptions struct {
-	CI        bool
-	Verbose   bool
-	DryRun    bool
-	BranchSet bool
-	BranchRef string
-	NoCache   bool
-	Files     []string
-	Provider  Provider
-	ADRs      []string
-	Parallel  *int
-	PerFile   bool
+	CI                bool
+	Verbose           bool
+	DryRun            bool
+	BranchSet         bool
+	BranchRef         string
+	NoCache           bool
+	Files             []string
+	Provider          Provider
+	ADRs              []string
+	Parallel          *int
+	PerFile           bool
+	ReviewPlan        bool
+	MaxTokensPerChunk int
+	MaxPackets        int
 }
 
 // LintResult is the outcome of checking a single ADR against a diff.

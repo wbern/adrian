@@ -12,6 +12,7 @@ import (
 	"github.com/wbern/adr-lint/go/internal/adr"
 	"github.com/wbern/adr-lint/go/internal/cache"
 	"github.com/wbern/adr-lint/go/internal/gitcontext"
+	"github.com/wbern/adr-lint/go/internal/reviewpacket"
 	"github.com/wbern/adr-lint/go/internal/types"
 )
 
@@ -365,6 +366,60 @@ func TestRun_DryRunSkipsLintInvocation(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "Dry run - would check 1 file(s)") {
 		t.Errorf("missing dry-run explanation: %q", buf.String())
+	}
+}
+
+func TestRun_ReviewPlanWritesPacketsWithoutModel(t *testing.T) {
+	gitRoot := t.TempDir()
+	writeADRWithPreFilter(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Brand", "lite", "src/**/*.css", "brand")
+	git := fakeGit(gitRoot, map[string]string{
+		"diff --cached --name-only": "src/theme.css\n",
+		"diff --cached -U3 -- src/theme.css": "diff --git a/src/theme.css b/src/theme.css\n" +
+			"index 1111111..2222222 100644\n--- a/src/theme.css\n+++ b/src/theme.css\n" +
+			"@@ -1 +1 @@\n-color: old;\n+color: brand;\n",
+	})
+
+	var buf bytes.Buffer
+	code, err := Run(types.LintOptions{ReviewPlan: true, MaxTokensPerChunk: 128}, RunDeps{
+		Out: &buf, Err: &buf, Git: git,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if code != 0 {
+		t.Errorf("exit = %d, want 0", code)
+	}
+	var plan reviewpacket.Plan
+	if err := json.Unmarshal(buf.Bytes(), &plan); err != nil {
+		t.Fatalf("review-plan output is not JSON: %v\n%s", err, buf.String())
+	}
+	if len(plan.Packets) != 1 {
+		t.Errorf("packets = %d, want 1", len(plan.Packets))
+	}
+}
+
+func TestRun_ReviewPlanWritesEmptyJSONWhenNoADRsApply(t *testing.T) {
+	gitRoot := t.TempDir()
+	git := fakeGit(gitRoot, map[string]string{
+		"diff --cached --name-only": "src/theme.css\n",
+	})
+
+	var buf bytes.Buffer
+	code, err := Run(types.LintOptions{ReviewPlan: true, MaxTokensPerChunk: 2048}, RunDeps{
+		Out: &buf, Err: &buf, Git: git,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if code != 0 {
+		t.Errorf("exit = %d, want 0", code)
+	}
+	var plan reviewpacket.Plan
+	if err := json.Unmarshal(buf.Bytes(), &plan); err != nil {
+		t.Fatalf("review-plan output is not JSON: %v\n%s", err, buf.String())
+	}
+	if plan.SchemaVersion != reviewpacket.SchemaVersion || len(plan.Packets) != 0 || plan.Packets == nil || plan.Skipped == nil {
+		t.Errorf("plan = %#v, want an empty review plan", plan)
 	}
 }
 

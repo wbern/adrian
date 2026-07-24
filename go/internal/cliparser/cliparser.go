@@ -39,6 +39,13 @@ func ParseArgs(args []string) (types.LintOptions, error) {
 	opts.DryRun = slices.Contains(args, "--dry-run")
 	opts.NoCache = slices.Contains(args, "--no-cache")
 	opts.PerFile = slices.Contains(args, "--per-file")
+	opts.ReviewPlan = slices.Contains(args, "--review-plan")
+	if err := resolveReviewPlanTokenBudget(args, &opts); err != nil {
+		return opts, err
+	}
+	if err := resolveReviewPlanPacketLimit(args, &opts); err != nil {
+		return opts, err
+	}
 
 	resolveBranch(args, &opts)
 	resolveFiles(args, &opts)
@@ -124,6 +131,47 @@ func resolveParallel(args []string, opts *types.LintOptions) error {
 		return fmt.Errorf("invalid --parallel value %q: must be a positive integer", val)
 	}
 	opts.Parallel = &n
+	return nil
+}
+
+func resolveReviewPlanTokenBudget(args []string, opts *types.LintOptions) error {
+	if !opts.ReviewPlan {
+		return nil
+	}
+	opts.MaxTokensPerChunk = 4096
+	idx := slices.Index(args, "--max-tokens-per-chunk")
+	if idx == -1 {
+		return nil
+	}
+	value := ""
+	if idx+1 < len(args) {
+		value = args[idx+1]
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 1 {
+		return fmt.Errorf("invalid --max-tokens-per-chunk value %q: must be a positive integer", value)
+	}
+	opts.MaxTokensPerChunk = n
+	return nil
+}
+
+func resolveReviewPlanPacketLimit(args []string, opts *types.LintOptions) error {
+	if !opts.ReviewPlan {
+		return nil
+	}
+	idx := slices.Index(args, "--max-packets")
+	if idx == -1 {
+		return nil
+	}
+	value := ""
+	if idx+1 < len(args) {
+		value = args[idx+1]
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 1 {
+		return fmt.Errorf("invalid --max-packets value %q: must be a positive integer", value)
+	}
+	opts.MaxPackets = n
 	return nil
 }
 

@@ -26,6 +26,7 @@ import (
 	"github.com/wbern/adr-lint/go/internal/logger"
 	"github.com/wbern/adr-lint/go/internal/patternmatcher"
 	"github.com/wbern/adr-lint/go/internal/resultaggregator"
+	"github.com/wbern/adr-lint/go/internal/reviewpacket"
 	"github.com/wbern/adr-lint/go/internal/syntheticdiff"
 	"github.com/wbern/adr-lint/go/internal/types"
 )
@@ -65,7 +66,7 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 		targetRef = opts.BranchRef
 	}
 
-	if opts.Verbose {
+	if opts.Verbose && !opts.ReviewPlan {
 		log.Log("ADR Lint starting...")
 		log.Log(fmt.Sprintf("Provider: %s", opts.Provider))
 		log.Log(fmt.Sprintf("Max parallel: %d", maxParallel))
@@ -96,6 +97,9 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 	}
 
 	if len(allChangedFiles) == 0 {
+		if opts.ReviewPlan {
+			return writeReviewPlan(deps.Out, reviewpacket.Build(nil, reviewpacket.Options{}))
+		}
 		if opts.BranchSet {
 			log.Log("No files changed compared to main.")
 		} else {
@@ -115,6 +119,9 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 	}
 
 	if len(changedFiles) == 0 {
+		if opts.ReviewPlan {
+			return writeReviewPlan(deps.Out, reviewpacket.Build(nil, reviewpacket.Options{}))
+		}
 		log.Log("All changed files are globally excluded from ADR checks.")
 		return 0, nil
 	}
@@ -125,6 +132,9 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 	}
 
 	if len(adrs) == 0 {
+		if opts.ReviewPlan {
+			return writeReviewPlan(deps.Out, reviewpacket.Build(nil, reviewpacket.Options{}))
+		}
 		log.Log("No ADRs with Decision sections found.")
 		return 0, nil
 	}
@@ -132,6 +142,9 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 	applicableADRs := filterApplicableADRs(adrs, changedFiles, opts.ADRs)
 
 	if len(applicableADRs) == 0 {
+		if opts.ReviewPlan {
+			return writeReviewPlan(deps.Out, reviewpacket.Build(nil, reviewpacket.Options{}))
+		}
 		if len(opts.ADRs) > 0 {
 			log.Log(fmt.Sprintf("No ADRs matching IDs: %s are applicable to changed files.",
 				strings.Join(opts.ADRs, ", ")))
@@ -177,6 +190,32 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 			return deps.Git.GetStagedDiffForFiles(files, includeContext)
 		}
 	}
+	if opts.ReviewPlan {
+		getReviewPlanDiff := func(files []string) string {
+			switch {
+			case opts.BranchSet:
+				return deps.Git.GetDiffAgainstMainForFilesWithContextLines(files, targetRef, 3)
+			case len(opts.Files) > 0:
+				return GenerateSyntheticDiffForFiles(files, gitRoot)
+			default:
+				return deps.Git.GetStagedDiffForFilesWithContextLines(files, 3)
+			}
+		}
+		inputs := make([]reviewpacket.Input, 0, len(pairs))
+		for _, pair := range pairs {
+			inputs = append(inputs, reviewpacket.Input{
+				ADR:   pair.adr,
+				Files: pair.files,
+				Diff:  getReviewPlanDiff(pair.files),
+			})
+		}
+		plan := reviewpacket.Build(inputs, reviewpacket.Options{
+			MaxTokensPerChunk: opts.MaxTokensPerChunk,
+			RequirePreFilter:  true,
+			MaxPackets:        opts.MaxPackets,
+		})
+		return writeReviewPlan(deps.Out, plan)
+	}
 
 	lintFn, ok := deps.LintFns[opts.Provider]
 	if !ok || lintFn == nil {
@@ -221,6 +260,12 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 		}
 	}
 	return 0, nil
+}
+
+func writeReviewPlan(w io.Writer, plan reviewpacket.Plan) (int, error) {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return 0, encoder.Encode(plan)
 }
 
 func derefExit(p *int) int {

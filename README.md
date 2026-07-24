@@ -256,6 +256,34 @@ adr-lint --no-cache            # bypass the result cache
 adr-lint --per-file            # one chunk per file (slower, more precise)
 ```
 
+### Produce a review packet without calling a model
+
+```bash
+adr-lint --branch --review-plan --max-tokens-per-chunk 2048 --max-packets 8
+```
+
+`--review-plan` writes JSON only. It does not start Claude or any other model.
+It is for a separate reviewer that needs a mechanically selected, bounded
+input rather than ADR Lint's built-in Claude adapter.
+
+Each packet contains one ADR decision, its relevant changed diff hunks, the
+matched lexical pre-filter terms, chunk position, and an estimated total input
+size. The configured limit covers both the ADR decision and the diff—not just
+the diff. ADRs without a `pre_filter`, unmatched pre-filters, and material that
+cannot fit the budget are returned in `skipped` with a reason rather than
+silently becoming model input.
+
+`--max-packets` does not truncate the plan. It marks
+`limits.packetLimitExceeded` when the change exceeds the consumer's declared
+capacity, so a local reviewer can decline the plan while a larger model can use
+the same complete packet inventory with a higher limit.
+
+With `diff_context: false`, matching hunks stay separate. With
+`diff_context: true`, matching hunks from the same file may share a packet when
+they fit. The planner uses three lines of unified-diff context rather than
+function-wide context, keeping a CSS file or long function from consuming the
+review window merely because one line matched a pre-filter.
+
 ## Integration
 
 ### Pre-commit hook (adopting adr-lint in your project)

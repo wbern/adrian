@@ -79,6 +79,36 @@ func TestParseArgs_CIFlag(t *testing.T) {
 	}
 }
 
+func TestParseArgs_ReviewPlanFlag(t *testing.T) {
+	got, err := ParseArgs([]string{"--review-plan"})
+	if err != nil {
+		t.Fatalf("ParseArgs: %v", err)
+	}
+	if !got.ReviewPlan {
+		t.Error("ReviewPlan should be true")
+	}
+}
+
+func TestParseArgs_ReviewPlanTokenBudget(t *testing.T) {
+	got, err := ParseArgs([]string{"--review-plan", "--max-tokens-per-chunk", "2048"})
+	if err != nil {
+		t.Fatalf("ParseArgs: %v", err)
+	}
+	if got.MaxTokensPerChunk != 2048 {
+		t.Errorf("MaxTokensPerChunk = %d, want 2048", got.MaxTokensPerChunk)
+	}
+}
+
+func TestParseArgs_ReviewPlanPacketLimit(t *testing.T) {
+	got, err := ParseArgs([]string{"--review-plan", "--max-packets", "8"})
+	if err != nil {
+		t.Fatalf("ParseArgs: %v", err)
+	}
+	if got.MaxPackets != 8 {
+		t.Errorf("MaxPackets = %d, want 8", got.MaxPackets)
+	}
+}
+
 func TestParseArgs_VerboseFlag(t *testing.T) {
 	got, err := ParseArgs([]string{"--verbose"})
 	if err != nil || !got.Verbose {
