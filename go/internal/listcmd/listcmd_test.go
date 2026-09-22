@@ -63,6 +63,34 @@ func TestRun_AnnotatesSupersededByReplacement(t *testing.T) {
 	}
 }
 
+func TestRun_AnnotatesEverySupersededByReplacement(t *testing.T) {
+	dir := t.TempDir()
+	writeADR(t, dir, "0001-old.md", "---\nstatus: superseded\nsuperseded_by: [\"0002\", 3]\n---\n# 1. Old\n\n## Decision\nx\n")
+	writeADR(t, dir, "0002-new-a.md", "---\nstatus: accepted\n---\n# 2. New A\n\n## Decision\ny\n")
+	writeADR(t, dir, "0003-new-b.md", "---\nstatus: accepted\n---\n# 3. New B\n\n## Decision\nz\n")
+
+	var out bytes.Buffer
+	if err := Run(nil, dir, &out); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(out.String(), "by 0002, 0003") {
+		t.Errorf("expected every superseded-by annotation in output:\n%s", out.String())
+	}
+}
+
+func TestRun_NormalizesNumericScalarSupersededBy(t *testing.T) {
+	dir := t.TempDir()
+	writeADR(t, dir, "0001-old.md", "---\nstatus: superseded\nsuperseded_by: 2\n---\n# 1. Old\n\n## Decision\nx\n")
+	writeADR(t, dir, "0002-new.md", "---\nstatus: accepted\n---\n# 2. New\n\n## Decision\ny\n")
+	var out bytes.Buffer
+	if err := Run(nil, dir, &out); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(out.String(), "by 0002") {
+		t.Errorf("expected normalized numeric successor:\n%s", out.String())
+	}
+}
+
 func TestRun_ListsADRsWithIDAndTitle(t *testing.T) {
 	dir := t.TempDir()
 	writeADR(t, dir, "0001-first.md", "---\nstatus: accepted\n---\n# 1. First Decision\n\n## Decision\nx\n")

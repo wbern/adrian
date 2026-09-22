@@ -48,18 +48,26 @@ func Run(args []string, dir string, out io.Writer) error {
 
 	for _, a := range adrs {
 		id := adr.NormalizeID(a.ID)
-		if a.Status == adr.StatusSuperseded && a.SupersededBy == "" {
+		if a.Status == adr.StatusSuperseded && len(a.SupersededBy) == 0 {
 			issues = append(issues,
 				fmt.Sprintf("ADR %s: status=superseded but no superseded_by set", id))
 		}
-		if a.SupersededBy != "" {
-			target := adr.NormalizeID(a.SupersededBy)
+		for _, successor := range a.SupersededBy {
+			target := adr.NormalizeID(successor)
 			if !ids[target] {
 				issues = append(issues, fmt.Sprintf(
 					"ADR %s: superseded_by references %q but no such ADR exists",
-					id, a.SupersededBy))
+					id, successor))
 			}
 		}
+	}
+
+	successors := make(map[string][]string, len(adrs))
+	for _, a := range adrs {
+		successors[adr.NormalizeID(a.ID)] = a.SupersededBy
+	}
+	if cycleErr := adr.ValidateSuccessorCycles(successors); cycleErr != nil {
+		issues = append(issues, cycleErr.Error())
 	}
 
 	if len(issues) > 0 {

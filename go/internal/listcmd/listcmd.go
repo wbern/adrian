@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/wbern/adrian/go/internal/adr"
 )
@@ -30,8 +31,8 @@ func Run(args []string, dir string, out io.Writer) error {
 			id = fmt.Sprintf("%04d", n)
 		}
 		title := a.Title
-		if a.SupersededBy != "" {
-			title = fmt.Sprintf("%s (by %s)", title, a.SupersededBy)
+		if len(a.SupersededBy) > 0 {
+			title = fmt.Sprintf("%s (by %s)", title, strings.Join(a.SupersededBy, ", "))
 		}
 		fmt.Fprintf(out, "%s  %-10s  %s\n", id, a.Status, title)
 	}
