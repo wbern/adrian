@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/wbern/adrian/compare/v0.2.0...v0.2.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* **claude:** capture stderr on the error path, and keep the prompt off argv ([6f1d2cc](https://github.com/wbern/adrian/commit/6f1d2cca7bfe620aa5bae8a4763cee60aa300f79))
+* **claude:** send the prompt on stdin — argv dies at MAX_ARG_STRLEN on Linux ([ea95dbb](https://github.com/wbern/adrian/commit/ea95dbb7033dbf43750d5a7106d459f43a129d02))
+
 ## [0.2.0](https://github.com/wbern/adr-lint/compare/v0.1.3...v0.2.0) (2026-08-19)
 
 
