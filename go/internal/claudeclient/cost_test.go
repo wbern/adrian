@@ -12,7 +12,7 @@ func TestLint_PopulatesTokenUsageFromCLIUsage(t *testing.T) {
 	body := `{"status":"PASS","confidence":"high","explanation":"No violations found"}`
 	envelope := `{"type":"result","result":"","structured_output":` + body +
 		`,"usage":{"input_tokens":1500,"output_tokens":100}}`
-	c := NewClient(func(args []string) (string, error) { return envelope, nil })
+	c := NewClient(func(args []string, _ string) (string, error) { return envelope, nil })
 
 	got, err := c.Lint(sampleADR(), "+ vi.fn()")
 	if err != nil {
@@ -43,7 +43,7 @@ func TestLint_CountsCachedInputTokens(t *testing.T) {
 	body := `{"status":"PASS","confidence":"high","explanation":"ok"}`
 	envelope := `{"type":"result","result":"","structured_output":` + body +
 		`,"usage":{"input_tokens":100,"output_tokens":10,"cache_read_input_tokens":900,"cache_creation_input_tokens":50}}`
-	c := NewClient(func(args []string) (string, error) { return envelope, nil })
+	c := NewClient(func(args []string, _ string) (string, error) { return envelope, nil })
 
 	got, err := c.Lint(sampleADR(), "+ vi.fn()")
 	if err != nil {
@@ -66,7 +66,7 @@ func TestLint_OmitsTokenUsageWhenCLIReportsNone(t *testing.T) {
 	// call.
 	body := `{"status":"PASS","confidence":"high","explanation":"ok"}`
 	envelope := `{"type":"result","result":"","structured_output":` + body + `}`
-	c := NewClient(func(args []string) (string, error) { return envelope, nil })
+	c := NewClient(func(args []string, _ string) (string, error) { return envelope, nil })
 
 	got, err := c.Lint(sampleADR(), "+ vi.fn()")
 	if err != nil {
@@ -84,12 +84,11 @@ func TestLint_RecordsPromptBytes(t *testing.T) {
 	body := `{"status":"PASS","confidence":"high","explanation":"ok"}`
 	envelope := `{"type":"result","result":"","structured_output":` + body + `}`
 	var sentPrompt string
-	c := NewClient(func(args []string) (string, error) {
-		for i, a := range args {
-			if a == "-p" && i+1 < len(args) {
-				sentPrompt = args[i+1]
-			}
-		}
+	c := NewClient(func(args []string, in string) (string, error) {
+		// The prompt travels on STDIN, not as the operand of -p
+		// (MAX_ARG_STRLEN). The assertion below is unchanged: the reported
+		// PromptBytes must equal the bytes actually sent.
+		sentPrompt = in
 		return envelope, nil
 	})
 
@@ -107,7 +106,7 @@ func TestLint_RecordsPromptBytes(t *testing.T) {
 
 func TestLint_SkippedDiffCostsNothing(t *testing.T) {
 	// An empty diff never reaches the model, so it must not claim any cost.
-	c := NewClient(func(args []string) (string, error) {
+	c := NewClient(func(args []string, _ string) (string, error) {
 		t.Fatal("the model was invoked for an empty diff")
 		return "", nil
 	})

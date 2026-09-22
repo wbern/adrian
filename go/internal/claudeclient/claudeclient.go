@@ -5,10 +5,12 @@
 package claudeclient
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
 	"time"
@@ -98,7 +100,7 @@ func (u *cliUsage) toTokenUsage(model string) *types.TokenUsage {
 // Runner shells out to claude with the given argv and returns its
 // stdout. On failure, returns a non-nil error whose Error() string is
 // surfaced to the user as the lint explanation.
-type Runner func(args []string) (string, error)
+type Runner func(args []string, stdin string) (string, error)
 
 // Client carries the claude Runner.
 type Client struct {
@@ -115,10 +117,28 @@ func NewClient(run Runner) *Client {
 // ErrCLINotFound and deadline-exceeded as ErrTimeout so the error
 // classifier can produce stable user-facing messages.
 func NewDefaultClient() *Client {
-	return NewClient(func(args []string) (string, error) {
+	return NewClient(func(args []string, stdin string) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), ClaudeTimeout)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, "claude", args...)
+		// THE PROMPT GOES ON STDIN, NEVER IN ARGV. Linux caps a SINGLE argv
+		// argument at MAX_ARG_STRLEN (128 KiB), independent of the 2 MiB
+		// ARG_MAX, so a prompt carrying a full ADR body plus a real diff is
+		// rejected by the kernel before claude ever starts. Measured on a Linux
+		// host 2026-08-20: argv of 100,000 B and 130,000 B succeeded, 200,000 B
+		// failed with "Argument list too long"; adr-lint reviewed a 187-byte
+		// diff and failed a 23,301-byte one for this reason alone.
+		// The same defect was already fixed once in this fleet's
+		// pr-review-diff.sh, whose comment reads: "Feed the potentially 120KB
+		// review prompt on stdin. Passing it as argv made full PR prompts
+		// return empty while small probes succeeded."
+		cmd.Stdin = strings.NewReader(stdin)
+		// STDERR IS EVIDENCE, NOT NOISE. cmd.Output() discards it, which is why
+		// the kernel's "Argument list too long" surfaced to users as the
+		// unactionable "Claude CLI error: exit status 1" and cost hours of
+		// bisection. Keep it and put it in the error.
+		var errBuf bytes.Buffer
+		cmd.Stderr = &errBuf
 		out, err := cmd.Output()
 		if err != nil {
 			if errors.Is(err, exec.ErrNotFound) {
@@ -126,6 +146,9 @@ func NewDefaultClient() *Client {
 			}
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				return "", ErrTimeout
+			}
+			if msg := strings.TrimSpace(errBuf.String()); msg != "" {
+				return string(out), fmt.Errorf("%w: %s", err, msg)
 			}
 			return string(out), err
 		}
@@ -151,14 +174,14 @@ func (c *Client) Lint(a adr.ADR, diff string) (types.LintResult, error) {
 	schemaJSON, _ := json.Marshal(schema)
 
 	args := []string{
-		"-p", prompt,
+		"-p",
 		"--output-format", "json",
 		"--model", model,
 		"--tools", "",
 		"--json-schema", string(schemaJSON),
 	}
 
-	out, err := c.run(args)
+	out, err := c.run(args, prompt)
 	if err != nil {
 		return c.classifyRunnerError(a, err), nil
 	}
