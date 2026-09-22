@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/wbern/adr-lint/go/internal/diffstats"
+	"github.com/wbern/adrian/go/internal/diffstats"
 )
 
 // readSuppliedDiff loads a unified diff handed to us from outside git — a PR

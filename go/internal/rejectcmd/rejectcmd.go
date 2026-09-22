@@ -5,8 +5,8 @@ package rejectcmd
 import (
 	"io"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
-	"github.com/wbern/adr-lint/go/internal/statuscmd"
+	"github.com/wbern/adrian/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/statuscmd"
 )
 
 // Run flips the ADR identified by args[0] to status "rejected".

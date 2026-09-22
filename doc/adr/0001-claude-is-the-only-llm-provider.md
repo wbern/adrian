@@ -19,9 +19,14 @@ paths, and historically caused inconsistent behavior across backends.
 
 ## Decision
 
-We will use the Claude Code CLI as the only analysis backend. New code
+We will use the Claude Code CLI as the only model-backed code-checking backend. New code
 must not introduce Gemini, Vertex AI, OpenAI, or any other LLM provider.
 The `--provider` flag accepts only `claude`.
+
+Deterministic ADR validation, lifecycle commands, and review planning do not
+invoke a model and need no Claude credentials. Review planning may describe
+semantic capabilities for an external consumer to execute; it does not add
+another analysis backend to the checker.
 
 ## Consequences
 

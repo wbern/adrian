@@ -5,11 +5,12 @@ applies_to:
   - ".github/workflows/**/*.yml"
   - "lefthook.yml"
 pre_filter:
+  - "adrian"
   - "adr-lint"
   - "adr_lint"
 ---
 
-# 3. Dogfood adr-lint locally, not in CI
+# 3. Dogfood model-backed ADR checks locally, not in CI
 
 ## Context
 
@@ -38,7 +39,10 @@ Three enforcement loci to consider:
 
 ## Decision
 
-We will run **adr-lint locally only**, never in CI.
+We will run **model-backed ADRian code checks locally only**, never in CI.
+The canonical command is `adrian check`; `adr-lint` remains a compatibility
+command. Deterministic `plan` and `validate` commands, Go tests, and binary
+smoke tests do not invoke Claude and are allowed in CI without model credentials.
 
 Locally it is **on by default** as a lefthook pre-commit step — this
 repo dogfoods its own linter, and the maintainer's Claude Code
@@ -87,18 +91,18 @@ question deserves a fresh decision.
   committer uses `ADR_LINT_SKIP=1` for a change that wasn't actually
   trivial.
 - Anyone who clones the repo and runs `lefthook install` must have
-  the `adr-lint` binary and Claude Code CLI available, or every
+  the `adrian` or compatibility `adr-lint` binary and Claude Code CLI available, or every
   commit fails. Acceptable for now since this repo has no external
   contributors — revisit if that changes.
 
 **Neutral:**
-- Most commits cost nothing. Two free-pass mechanisms compose:
+- Most commits cost nothing. Two skip mechanisms compose:
   ADRs whose `applies_to` globs don't match the staged diff are
   never loaded; ADRs that do match but whose `pre_filter` substrings
-  don't appear in the diff auto-pass without an LLM call. A Claude
+  don't appear in the diff are reported as skipped without an LLM call. A Claude
   Code call only fires for an ADR that matches *and* pre-filters in.
 
 ## References
 
-- ADR-0001 (Claude is the only LLM provider) — establishes that every
-  run is a Claude Code subscription call.
+- ADR-0001 (Claude is the only LLM provider) — establishes the backend
+  for model-backed checks; planning and lifecycle commands need no model.

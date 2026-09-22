@@ -9,10 +9,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
-	"github.com/wbern/adr-lint/go/internal/cache"
-	"github.com/wbern/adr-lint/go/internal/gitcontext"
-	"github.com/wbern/adr-lint/go/internal/types"
+	"github.com/wbern/adrian/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/cache"
+	"github.com/wbern/adrian/go/internal/gitcontext"
+	"github.com/wbern/adrian/go/internal/types"
 )
 
 // fakeGit returns a Git client that uses gitRoot as the resolved root

@@ -16,10 +16,15 @@ var version = ""
 
 // Run prints a single "adr-lint <version>" line to out. It takes no args.
 func Run(args []string, _ string, out io.Writer) error {
+	return RunNamed("adr-lint", args, "", out)
+}
+
+// RunNamed reports the canonical or compatibility executable name.
+func RunNamed(name string, args []string, _ string, out io.Writer) error {
 	if len(args) > 0 {
-		return fmt.Errorf("unexpected args: usage: adr-lint version")
+		return fmt.Errorf("unexpected args: usage: %s version", name)
 	}
-	fmt.Fprintf(out, "adr-lint %s\n", buildVersion())
+	fmt.Fprintf(out, "%s %s\n", name, buildVersion())
 	return nil
 }
 

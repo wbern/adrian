@@ -3,7 +3,7 @@ package diffchunker
 import (
 	"strings"
 
-	"github.com/wbern/adr-lint/go/internal/diffstats"
+	"github.com/wbern/adrian/go/internal/diffstats"
 )
 
 const criticalReminder = "\n⚠️ REMINDER: Only check ADDED lines for violations ⚠️\n" +

@@ -9,7 +9,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/adr"
 )
 
 // Spec parametrizes SetStatus for each lifecycle verb. Verb is the

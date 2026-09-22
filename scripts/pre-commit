@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Sample pre-commit hook for adr-lint.
+# Sample pre-commit hook for adrian.
 #
 # Install with:
 #   ln -s ../../scripts/pre-commit .git/hooks/pre-commit
 #
-# Requires `adr-lint` on PATH and the Claude Code CLI authenticated.
+# Requires `adrian` (or the compatibility `adr-lint`) on PATH and the
+# Claude Code CLI authenticated.
 
 set -e
 
-if ! command -v adr-lint >/dev/null 2>&1; then
-  echo "adr-lint not on PATH; skipping ADR check" >&2
-  exit 0
+if command -v adrian >/dev/null 2>&1; then
+  exec adrian check
+elif command -v adr-lint >/dev/null 2>&1; then
+  exec adr-lint
 fi
-
-adr-lint
+echo "adrian/adr-lint not on PATH; skipping ADR check" >&2

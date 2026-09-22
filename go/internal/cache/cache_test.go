@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
-	"github.com/wbern/adr-lint/go/internal/logger"
-	"github.com/wbern/adr-lint/go/internal/types"
+	"github.com/wbern/adrian/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/logger"
+	"github.com/wbern/adrian/go/internal/types"
 )
 
 func sampleADR() adr.ADR {

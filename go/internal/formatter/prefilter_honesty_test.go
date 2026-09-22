@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
-	"github.com/wbern/adr-lint/go/internal/types"
+	"github.com/wbern/adrian/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/types"
 )
 
 // A pre-filtered ADR was NOT CHECKED. Reporting that as PASS makes an

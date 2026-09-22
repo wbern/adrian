@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/adr"
 )
 
 // Run finds the ADR whose ID matches args[0] and writes its file contents

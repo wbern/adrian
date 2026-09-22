@@ -8,7 +8,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/adr"
 )
 
 // MatchesADR reports whether file is targeted by the ADR's applies_to list.
@@ -21,14 +21,26 @@ import (
 //     considered matched — the "exclude these from an otherwise-implicit
 //     universe" idiom.
 func MatchesADR(file string, a adr.ADR) bool {
-	for _, p := range a.AppliesTo {
+	if len(a.AppliesToScopes) > 0 {
+		for _, patterns := range a.AppliesToScopes {
+			if matchesPatterns(file, patterns) {
+				return true
+			}
+		}
+		return false
+	}
+	return matchesPatterns(file, a.AppliesTo)
+}
+
+func matchesPatterns(file string, patterns []string) bool {
+	for _, p := range patterns {
 		if strings.HasPrefix(p, "!") && matchGlob(file, p[1:]) {
 			return false
 		}
 	}
 
 	hasPositive := false
-	for _, p := range a.AppliesTo {
+	for _, p := range patterns {
 		if strings.HasPrefix(p, "!") {
 			continue
 		}

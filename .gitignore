@@ -16,3 +16,8 @@ __pycache__/
 state.json
 CLAUDE.md
 CLAUDE.local.md
+
+# Gas City
+.beads/*
+!.beads/identity.toml
+.agents/

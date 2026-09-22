@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wbern/adr-lint/go/internal/types"
+	"github.com/wbern/adrian/go/internal/types"
 )
 
 var validProviders = []types.Provider{

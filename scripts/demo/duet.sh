@@ -4,7 +4,7 @@
 # A tmux session is set up with a horizontal split. The LEFT pane is the
 # architect who's fed up with onomatopoeic identifiers and writes an ADR
 # to ban them. The RIGHT pane is Bob, oblivious, who pushes a feature with
-# meow_meow_count and watches adr-lint catch it.
+# meow_meow_count and watches adrian catch it.
 #
 # Usage: duet.sh <workdir>
 #
@@ -16,11 +16,11 @@
 #   `tmux attach` lets asciinema capture live rendering as keys arrive.
 #   The driver kills the session at the end, which detaches us cleanly.
 # - Each `run_cmd` types char-by-char (visual typing), presses Enter,
-#   then sleeps long enough for the command to finish. adr-lint calls
+#   then sleeps long enough for the command to finish. adrian calls
 #   Claude and is highly variable; LINT_BEAT is sized generously.
 # - Uses a private tmux socket (`-L adr_duet`) so it never shares state
 #   with the user's other tmux sessions.
-# - No `-e`: adr-lint exits non-zero on Bob's violation, which is the
+# - No `-e`: adrian exits non-zero on Bob's violation, which is the
 #   point of the scene — we must not abort on it.
 set -uo pipefail
 
@@ -35,7 +35,7 @@ TMX=(tmux -L "$SESSION")
 TYPE_SPEED="${TYPE_SPEED:-0.025}"
 # How long to wait after a normal command finishes before the next beat.
 BEAT="${BEAT:-1.4}"
-# How long to wait after `adr-lint` — Claude can take a while.
+# How long to wait after `adrian` — Claude can take a while.
 LINT_BEAT="${LINT_BEAT:-20}"
 # Slight pause when switching focus between panes.
 SWITCH_BEAT="${SWITCH_BEAT:-1.2}"
@@ -116,11 +116,11 @@ say() {
     say "$LEFT_TARGET" "third PR with meow_meow_count this sprint. enough."
     sleep 0.4
 
-    run_cmd "$LEFT_TARGET" "adr-lint create 'Ban animal sounds in identifiers'" 2.5
+    run_cmd "$LEFT_TARGET" "adrian create 'Ban animal sounds in identifiers'" 2.5
 
     # Tighten the ADR off-camera so the lint on the right is fast and
     # surgical. We never `cat` it back — the title carries the meaning.
-    # Resolve via glob so we don't couple to adr-lint's exact slugifier.
+    # Resolve via glob so we don't couple to adrian's exact slugifier.
     adr_path=("$WORK"/doc/adr/0001-*.md)
     cat > "${adr_path[0]}" <<'EOF'
 ---
@@ -142,7 +142,7 @@ pre_filter:
 Identifiers must not be animal sounds. Use names that describe intent.
 EOF
 
-    run_cmd "$LEFT_TARGET" "adr-lint accept 1" 2.0
+    run_cmd "$LEFT_TARGET" "adrian accept 1" 2.0
 
     sleep "$SWITCH_BEAT"
 
@@ -160,7 +160,7 @@ func moo_moo_handler() { fmt.Println("moo") }
 EOF
 
     run_cmd "$RIGHT_TARGET" "cat zoo.go" 2.0
-    run_cmd "$RIGHT_TARGET" "git add zoo.go && adr-lint" "$LINT_BEAT"
+    run_cmd "$RIGHT_TARGET" "git add zoo.go && adrian" "$LINT_BEAT"
 
     sleep 0.8
     say "$RIGHT_TARGET" "...oh."

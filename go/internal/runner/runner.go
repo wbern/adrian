@@ -16,18 +16,18 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
-	"github.com/wbern/adr-lint/go/internal/cache"
-	"github.com/wbern/adr-lint/go/internal/diffchunker"
-	"github.com/wbern/adr-lint/go/internal/diffstats"
-	"github.com/wbern/adr-lint/go/internal/filefilter"
-	"github.com/wbern/adr-lint/go/internal/formatter"
-	"github.com/wbern/adr-lint/go/internal/gitcontext"
-	"github.com/wbern/adr-lint/go/internal/logger"
-	"github.com/wbern/adr-lint/go/internal/patternmatcher"
-	"github.com/wbern/adr-lint/go/internal/resultaggregator"
-	"github.com/wbern/adr-lint/go/internal/syntheticdiff"
-	"github.com/wbern/adr-lint/go/internal/types"
+	"github.com/wbern/adrian/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/cache"
+	"github.com/wbern/adrian/go/internal/diffchunker"
+	"github.com/wbern/adrian/go/internal/diffstats"
+	"github.com/wbern/adrian/go/internal/filefilter"
+	"github.com/wbern/adrian/go/internal/formatter"
+	"github.com/wbern/adrian/go/internal/gitcontext"
+	"github.com/wbern/adrian/go/internal/logger"
+	"github.com/wbern/adrian/go/internal/patternmatcher"
+	"github.com/wbern/adrian/go/internal/resultaggregator"
+	"github.com/wbern/adrian/go/internal/syntheticdiff"
+	"github.com/wbern/adrian/go/internal/types"
 )
 
 // DefaultMaxParallel is the default upper bound on concurrent

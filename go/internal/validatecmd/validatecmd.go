@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/adr"
 )
 
 // Run validates every ADR under dir for structural issues that LoadADRs

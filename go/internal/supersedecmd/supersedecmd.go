@@ -8,7 +8,7 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/adr"
 )
 
 // Run flips the ADR identified by args[0] to status "superseded" and

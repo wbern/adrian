@@ -9,7 +9,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>adr-lint duet — animated preview</title>
+<title>adrian duet — animated preview</title>
 <style>
   :root {
     --bg: #1a1a1a;
@@ -105,7 +105,7 @@
 </head>
 <body>
 <header>
-  <h1>adr-lint duet — animated preview</h1>
+  <h1>adrian duet — animated preview</h1>
   <p>Same choreography <code>duet.sh</code> drives via tmux. Click Replay to watch again. Speed slider scales typing + beats.</p>
   <label class="speed">speed <input id="speed" type="range" min="0.25" max="3" step="0.25" value="1"> <span id="speedLabel">1.0×</span></label>
   <button id="replay">Replay</button>
@@ -217,11 +217,11 @@
     await comment(leftEl, 'L', "third PR with meow_meow_count this sprint. enough.");
     await sleep(400);
 
-    await runCmd(leftEl, 'L', "adr-lint create 'Ban animal sounds in identifiers'", 300);
+    await runCmd(leftEl, 'L', "adrian create 'Ban animal sounds in identifiers'", 300);
     await dump(leftEl,
       `<span class="ok">✓</span> Created doc/adr/0001-ban-animal-sounds-in-identifiers.md\n`, 600);
 
-    await runCmd(leftEl, 'L', "adr-lint accept 1", 300);
+    await runCmd(leftEl, 'L', "adrian accept 1", 300);
     await dump(leftEl, `<span class="ok">✓</span> ADR 0001 → accepted\n`, 600);
     showPrompt(leftEl, 'L');
 
@@ -242,7 +242,7 @@ func meow_meow_count(cats int) int { return cats * 9 }
 func moo_moo_handler() { fmt.Println("moo") }
 `, 700);
 
-    await runCmd(rightEl, 'R', "git add zoo.go && adr-lint", 300);
+    await runCmd(rightEl, 'R', "git add zoo.go && adrian", 300);
     await dump(rightEl,
       `<span class="dim">→ ADR 0001: pre_filter matched, querying Claude…</span>\n`, 1100);
     await dump(rightEl,
