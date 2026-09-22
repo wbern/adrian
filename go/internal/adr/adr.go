@@ -58,7 +58,7 @@ type ADR struct {
 	PreFilter       []string
 	EnforcedBy      *string
 	DiffContext     bool
-	SupersededBy    string
+	SupersededBy    []string
 }
 
 // frontmatter is the raw shape of the YAML block; field types accept the
@@ -71,7 +71,84 @@ type frontmatter struct {
 	PreFilter    interface{}       `yaml:"pre_filter"`
 	EnforcedBy   string            `yaml:"enforced_by"`
 	DiffContext  *bool             `yaml:"diff_context"`
-	SupersededBy string            `yaml:"superseded_by"`
+	SupersededBy successorIDs      `yaml:"superseded_by"`
+}
+
+// successorIDs accepts the historical scalar form and the sequence form used
+// when an ADR is replaced by more than one decision. Both shapes normalize to
+// four-digit ADR IDs so downstream graph checks have one representation.
+type successorIDs []string
+
+func (s *successorIDs) UnmarshalYAML(n *yaml.Node) error {
+	ids, err := DecodeSuccessorIDs(n)
+	if err != nil {
+		return err
+	}
+	*s = ids
+	return nil
+}
+
+// DecodeSuccessorIDs normalizes a scalar or sequence-valued superseded_by
+// node. It is shared by generic ADR parsing and strict review-policy parsing.
+func DecodeSuccessorIDs(n *yaml.Node) ([]string, error) {
+	nodes := n.Content
+	if n.Kind == yaml.ScalarNode {
+		nodes = []*yaml.Node{n}
+	} else if n.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("superseded_by must be an ADR ID or sequence of ADR IDs")
+	}
+	ids := make([]string, 0, len(nodes))
+	seen := make(map[string]bool, len(nodes))
+	for _, node := range nodes {
+		if node.Kind != yaml.ScalarNode || (node.Tag != "!!str" && node.Tag != "!!int") {
+			return nil, fmt.Errorf("superseded_by entries must be ADR IDs")
+		}
+		id, err := strconv.Atoi(strings.TrimSpace(node.Value))
+		if err != nil || id < 0 || id > 9999 {
+			return nil, fmt.Errorf("invalid superseded_by successor %q", node.Value)
+		}
+		normalized := fmt.Sprintf("%04d", id)
+		if seen[normalized] {
+			return nil, fmt.Errorf("duplicate superseded_by successor %q", normalized)
+		}
+		seen[normalized] = true
+		ids = append(ids, normalized)
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("superseded_by must not be empty")
+	}
+	return ids, nil
+}
+
+// ValidateSuccessorCycles rejects self-cycles and longer cycles in an ADR
+// successor graph. Reference existence is intentionally checked by callers so
+// they can retain their command-specific diagnostics.
+func ValidateSuccessorCycles(successors map[string][]string) error {
+	visiting, done := map[string]bool{}, map[string]bool{}
+	var visit func(string) error
+	visit = func(id string) error {
+		if visiting[id] {
+			return fmt.Errorf("ADR successor cycle at %s", id)
+		}
+		if done[id] {
+			return nil
+		}
+		visiting[id] = true
+		for _, next := range successors[id] {
+			if err := visit(next); err != nil {
+				return err
+			}
+		}
+		visiting[id] = false
+		done[id] = true
+		return nil
+	}
+	for id := range successors {
+		if err := visit(id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // appliesToPatterns accepts both legacy glob lists and ADRian typed scopes.
@@ -234,9 +311,9 @@ func ParseADR(content, filePath string) ADR {
 		diffContext = *fm.DiffContext
 	}
 
-	supersededBy := ""
+	var supersededBy []string
 	if fm != nil {
-		supersededBy = strings.TrimSpace(fm.SupersededBy)
+		supersededBy = append(supersededBy, fm.SupersededBy...)
 	}
 
 	return ADR{

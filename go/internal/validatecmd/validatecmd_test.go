@@ -82,6 +82,83 @@ func TestRun_AcceptsValidSet(t *testing.T) {
 	}
 }
 
+func TestRun_AcceptsSequenceValuedSupersededBy(t *testing.T) {
+	dir := t.TempDir()
+	writeADR(t, dir, "0001-old.md",
+		"---\nstatus: superseded\nsuperseded_by: [\"0002\", 3]\n---\n# 1. Old\n\n## Decision\nx\n")
+	writeADR(t, dir, "0002-new-a.md", "---\nstatus: accepted\n---\n# 2. New A\n\n## Decision\ny\n")
+	writeADR(t, dir, "0003-new-b.md", "---\nstatus: accepted\n---\n# 3. New B\n\n## Decision\nz\n")
+
+	var out bytes.Buffer
+	if err := Run(nil, dir, &out); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
+func TestRun_FlagsEveryDanglingSequenceSuccessor(t *testing.T) {
+	dir := t.TempDir()
+	writeADR(t, dir, "0001-old.md",
+		"---\nstatus: superseded\nsuperseded_by: [\"0098\", 99]\n---\n# 1. Old\n\n## Decision\nx\n")
+
+	var out bytes.Buffer
+	err := Run(nil, dir, &out)
+	if err == nil {
+		t.Fatal("expected error for dangling successors")
+	}
+	for _, want := range []string{"0098", "0099"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error missing dangling successor %s: %v", want, err)
+		}
+	}
+}
+
+func TestRun_RejectsInvalidSequenceSuccessor(t *testing.T) {
+	dir := t.TempDir()
+	writeADR(t, dir, "0001-old.md",
+		"---\nstatus: superseded\nsuperseded_by: [\"0002\", {id: \"0003\"}]\n---\n# 1. Old\n\n## Decision\nx\n")
+
+	var out bytes.Buffer
+	err := Run(nil, dir, &out)
+	if err == nil || !strings.Contains(err.Error(), "malformed frontmatter") {
+		t.Fatalf("expected malformed frontmatter error, got %v", err)
+	}
+}
+
+func TestRun_RejectsSelfSuccessorCycle(t *testing.T) {
+	dir := t.TempDir()
+	writeADR(t, dir, "0001-self.md", "---\nstatus: superseded\nsuperseded_by: 1\n---\n# 1. Self\n\n## Decision\nx\n")
+	var out bytes.Buffer
+	err := Run(nil, dir, &out)
+	if err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("expected successor cycle error, got %v", err)
+	}
+}
+
+func TestRun_RejectsMultiNodeSuccessorCycle(t *testing.T) {
+	dir := t.TempDir()
+	writeADR(t, dir, "0001-a.md", "---\nstatus: superseded\nsuperseded_by: 2\n---\n# 1. A\n\n## Decision\nx\n")
+	writeADR(t, dir, "0002-b.md", "---\nstatus: superseded\nsuperseded_by: 1\n---\n# 2. B\n\n## Decision\ny\n")
+	var out bytes.Buffer
+	err := Run(nil, dir, &out)
+	if err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("expected successor cycle error, got %v", err)
+	}
+}
+
+func TestRun_RejectsEmptyOrDuplicateSuccessors(t *testing.T) {
+	for _, value := range []string{"[]", `""`, `[2, "0002"]`} {
+		t.Run(value, func(t *testing.T) {
+			dir := t.TempDir()
+			writeADR(t, dir, "0001-old.md", "---\nstatus: superseded\nsuperseded_by: "+value+"\n---\n# 1. Old\n\n## Decision\nx\n")
+			writeADR(t, dir, "0002-new.md", "---\nstatus: accepted\n---\n# 2. New\n\n## Decision\ny\n")
+			var out bytes.Buffer
+			if err := Run(nil, dir, &out); err == nil {
+				t.Fatalf("expected %s to be rejected", value)
+			}
+		})
+	}
+}
+
 func TestRun_RejectsExtraArgs(t *testing.T) {
 	dir := t.TempDir()
 	var out bytes.Buffer

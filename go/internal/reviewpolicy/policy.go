@@ -11,10 +11,10 @@ import (
 	"io"
 	"path"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	adrmeta "github.com/wbern/adrian/go/internal/adr"
 	"gopkg.in/yaml.v3"
 )
 
@@ -147,21 +147,10 @@ func ParseADR(file string, raw []byte, r Registry) (ADR, error) {
 		return a, fmt.Errorf("%s: invalid status %q", file, a.Status)
 	}
 	if successor := value(n, "superseded_by"); successor != nil {
-		nodes := successor.Content
-		if successor.Kind == yaml.ScalarNode {
-			nodes = []*yaml.Node{successor}
-		} else if successor.Kind != yaml.SequenceNode {
-			return a, fmt.Errorf("%s: invalid superseded_by", file)
-		}
-		for _, node := range nodes {
-			if node.Kind != yaml.ScalarNode || (node.Tag != "!!str" && node.Tag != "!!int") {
-				return a, fmt.Errorf("%s: invalid superseded_by", file)
-			}
-			id, err := strconv.Atoi(node.Value)
-			if err != nil || id < 0 || id > 9999 {
-				return a, fmt.Errorf("%s: invalid successor %q", file, node.Value)
-			}
-			a.SupersededBy = append(a.SupersededBy, fmt.Sprintf("%04d", id))
+		var decodeErr error
+		a.SupersededBy, decodeErr = adrmeta.DecodeSuccessorIDs(successor)
+		if decodeErr != nil {
+			return a, fmt.Errorf("%s: %w", file, decodeErr)
 		}
 	}
 	applies := value(n, "applies_to")
@@ -239,31 +228,11 @@ func ValidateSet(policies []ADR) error {
 			}
 		}
 	}
-	visiting, done := map[string]bool{}, map[string]bool{}
-	var visit func(string) error
-	visit = func(id string) error {
-		if visiting[id] {
-			return fmt.Errorf("ADR successor cycle at %s", id)
-		}
-		if done[id] {
-			return nil
-		}
-		visiting[id] = true
-		for _, next := range byID[id].SupersededBy {
-			if err := visit(next); err != nil {
-				return err
-			}
-		}
-		visiting[id] = false
-		done[id] = true
-		return nil
-	}
+	successors := make(map[string][]string, len(byID))
 	for _, a := range policies {
-		if err := visit(a.ID); err != nil {
-			return err
-		}
+		successors[a.ID] = a.SupersededBy
 	}
-	return nil
+	return adrmeta.ValidateSuccessorCycles(successors)
 }
 
 func parseReview(n *yaml.Node, r Registry) (Review, error) {
