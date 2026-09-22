@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/wbern/adrian/compare/v0.2.1...v0.3.0) (2026-09-22)
+
+
+### Features
+
+* evolve adr-lint into ADRian review planning ([96169e7](https://github.com/wbern/adrian/commit/96169e7d130dd969bb598d011dab111a5c3534a9))
+* evolve adr-lint into ADRian review planning ([f3e349d](https://github.com/wbern/adrian/commit/f3e349df22936a2cfd7cf559ee60f9994dfb604b))
+
 ## [0.2.1](https://github.com/wbern/adrian/compare/v0.2.0...v0.2.1) (2026-09-22)
 
 
