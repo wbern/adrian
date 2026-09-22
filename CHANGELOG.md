@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/wbern/adrian/compare/v0.3.0...v0.3.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* preserve multi-successor ADR graphs ([f744be6](https://github.com/wbern/adrian/commit/f744be68617b6b7670d45ccc1db3606feb68a938))
+* preserve multi-successor ADR graphs ([4d12ab9](https://github.com/wbern/adrian/commit/4d12ab94b030b79c1f2892303e236f6f4d92d68a))
+
 ## [0.3.0](https://github.com/wbern/adrian/compare/v0.2.1...v0.3.0) (2026-09-22)
 
 
