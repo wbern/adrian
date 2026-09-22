@@ -45,31 +45,63 @@ const DirName = "doc/adr"
 // one-element slice so the "any pattern matches" semantics hold.
 // EnforcedBy is *string to distinguish "missing" from "empty".
 type ADR struct {
-	ID           string
-	Title        string
-	Status       Status
-	AppliesTo    []string
-	Complexity   Complexity
-	Decision     string
-	FilePath     string
-	Content      string
-	PreFilter    []string
-	EnforcedBy   *string
-	DiffContext  bool
-	SupersededBy string
+	ID        string
+	Title     string
+	Status    Status
+	AppliesTo []string
+	// AppliesToScopes keeps each typed scope's exclusions local to that scope.
+	AppliesToScopes [][]string
+	Complexity      Complexity
+	Decision        string
+	FilePath        string
+	Content         string
+	PreFilter       []string
+	EnforcedBy      *string
+	DiffContext     bool
+	SupersededBy    string
 }
 
 // frontmatter is the raw shape of the YAML block; field types accept the
 // union shapes the original parser handled.
 type frontmatter struct {
-	Status       string      `yaml:"status"`
-	Date         string      `yaml:"date"`
-	AppliesTo    []string    `yaml:"applies_to"`
-	Complexity   string      `yaml:"complexity"`
-	PreFilter    interface{} `yaml:"pre_filter"`
-	EnforcedBy   string      `yaml:"enforced_by"`
-	DiffContext  *bool       `yaml:"diff_context"`
-	SupersededBy string      `yaml:"superseded_by"`
+	Status       string            `yaml:"status"`
+	Date         string            `yaml:"date"`
+	AppliesTo    appliesToPatterns `yaml:"applies_to"`
+	Complexity   string            `yaml:"complexity"`
+	PreFilter    interface{}       `yaml:"pre_filter"`
+	EnforcedBy   string            `yaml:"enforced_by"`
+	DiffContext  *bool             `yaml:"diff_context"`
+	SupersededBy string            `yaml:"superseded_by"`
+}
+
+// appliesToPatterns accepts both legacy glob lists and ADRian typed scopes.
+// Review metadata is interpreted by reviewpolicy, not by advisory linting.
+type appliesToPatterns struct {
+	Patterns []string
+	Scopes   [][]string
+}
+
+func (a *appliesToPatterns) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind != yaml.SequenceNode {
+		return fmt.Errorf("applies_to must be a sequence")
+	}
+	for _, entry := range n.Content {
+		if entry.Kind == yaml.ScalarNode && entry.Tag == "!!str" {
+			a.Patterns = append(a.Patterns, entry.Value)
+			continue
+		}
+		var scope struct {
+			Paths []string `yaml:"paths"`
+		}
+		if err := entry.Decode(&scope); err != nil {
+			return err
+		}
+		if len(scope.Paths) == 0 {
+			return fmt.Errorf("typed applies_to scope needs paths")
+		}
+		a.Scopes = append(a.Scopes, scope.Paths)
+	}
+	return nil
 }
 
 // titleRe matches the H1 header that carries the ADR's number and title,
@@ -169,8 +201,15 @@ func ParseADR(content, filePath string) ADR {
 	status := parseStatusValue(strOr(fm, func(f *frontmatter) string { return f.Status }))
 
 	var appliesTo []string
-	if fm != nil && len(fm.AppliesTo) > 0 {
-		appliesTo = fm.AppliesTo
+	var scopes [][]string
+	if fm != nil && (len(fm.AppliesTo.Patterns) > 0 || len(fm.AppliesTo.Scopes) > 0) {
+		appliesTo = fm.AppliesTo.Patterns
+		if len(fm.AppliesTo.Scopes) > 0 {
+			scopes = append(scopes, fm.AppliesTo.Scopes...)
+			if len(appliesTo) > 0 {
+				scopes = append([][]string{appliesTo}, scopes...)
+			}
+		}
 	} else {
 		appliesTo = parseAppliesToFromSection(body)
 	}
@@ -201,18 +240,19 @@ func ParseADR(content, filePath string) ADR {
 	}
 
 	return ADR{
-		ID:           id,
-		Title:        title,
-		Status:       status,
-		AppliesTo:    appliesTo,
-		Complexity:   complexity,
-		Decision:     decision,
-		FilePath:     filePath,
-		Content:      body,
-		PreFilter:    preFilter,
-		EnforcedBy:   enforcedBy,
-		DiffContext:  diffContext,
-		SupersededBy: supersededBy,
+		ID:              id,
+		Title:           title,
+		Status:          status,
+		AppliesTo:       appliesTo,
+		AppliesToScopes: scopes,
+		Complexity:      complexity,
+		Decision:        decision,
+		FilePath:        filePath,
+		Content:         body,
+		PreFilter:       preFilter,
+		EnforcedBy:      enforcedBy,
+		DiffContext:     diffContext,
+		SupersededBy:    supersededBy,
 	}
 }
 

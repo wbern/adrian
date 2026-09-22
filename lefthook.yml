@@ -44,6 +44,7 @@ pre-commit:
     gitleaks:
       run: gitleaks protect --staged --redact --no-banner
     adr-lint:
+      # Retain the step name and environment variable for existing skip commands.
       # On by default — this repo dogfoods its own linter. Skip a single
       # commit with ADR_LINT_SKIP=1 git commit ..., or LEFTHOOK_EXCLUDE=adr-lint
       # git commit ... See ADR-0003 for the rationale.
@@ -52,7 +53,11 @@ pre-commit:
           echo "adr-lint: skipped (ADR_LINT_SKIP=1)" >&2
           exit 0
         fi
-        adr-lint
+        if command -v adrian >/dev/null 2>&1; then
+          adrian check
+        else
+          adr-lint
+        fi
 
 pre-push:
   commands:

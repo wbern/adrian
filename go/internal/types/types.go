@@ -3,7 +3,7 @@
 // is distinguishable from a zero value.
 package types
 
-import "github.com/wbern/adr-lint/go/internal/adr"
+import "github.com/wbern/adrian/go/internal/adr"
 
 // Provider names a supported LLM backend.
 type Provider string

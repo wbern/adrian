@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Drives the README demo: pretends to be a developer adopting adr-lint in a
+# Drives the README demo: pretends to be a developer adopting adrian in a
 # fresh repo. Run inside an asciinema recording — every command is "typed"
 # char-by-char so the cast looks like a real session.
 #
 # Usage: scenario.sh <section>
 #   create    - create + accept + list + validate
-#   lint      - stage a violating file, run --dry-run, then real adr-lint
+#   lint      - stage a violating file, run --dry-run, then real adrian
 #   lifecycle - supersede, list final state
 #   all       - run every section back-to-back (the README hero gif)
 #
@@ -13,7 +13,7 @@
 # git init) silently before invoking this script — repo plumbing is not
 # part of what the viewer needs to see.
 #
-# Note: -e is intentionally NOT set. `adr-lint` exits non-zero when it
+# Note: -e is intentionally NOT set. `adrian` exits non-zero when it
 # finds a violation, which is the point of the lint section — we don't
 # want that to abort subsequent sections in the `all` walkthrough.
 set -uo pipefail
@@ -77,7 +77,7 @@ write_file() {
 section_create() {
     banner "Author your first ADR"
     say "Capture the decision: no fmt.Println for logging."
-    do_cmd "adr-lint create 'Use the logger package instead of fmt.Println'"
+    do_cmd "adrian create 'Use the logger package instead of fmt.Println'"
     say "The scaffold gives us minimal frontmatter — applies to everything by default."
     do_cmd "cat doc/adr/0001-use-the-logger-package-instead-of-fmt-println.md"
     say "Tighten frontmatter: applies_to + pre_filter so the lint is cheap."
@@ -97,9 +97,9 @@ All runtime logging goes through the project logger. New code must not
 use `fmt.Println` to surface diagnostics — it bypasses log levels and
 structured fields.
 '
-    do_cmd "adr-lint accept 1"
-    do_cmd "adr-lint list"
-    do_cmd "adr-lint validate"
+    do_cmd "adrian accept 1"
+    do_cmd "adrian list"
+    do_cmd "adrian validate"
 }
 
 section_lint() {
@@ -115,9 +115,9 @@ func handle() {
 '
     do_cmd "git add handler.go"
     say "Preview: which ADRs apply? (--dry-run skips the LLM call)"
-    do_cmd "adr-lint --dry-run"
+    do_cmd "adrian --dry-run"
     say "Now run for real. --verbose shows what's being sent to Claude."
-    do_cmd "adr-lint --verbose"
+    do_cmd "adrian --verbose"
     say "Fix the violation: switch to the project logger."
     write_file handler.go 'package main
 
@@ -129,7 +129,7 @@ func handle() {
 '
     do_cmd "git add handler.go"
     say "Re-run: pre_filter no longer matches the diff → instant PASS, no LLM call."
-    do_cmd "adr-lint"
+    do_cmd "adrian"
 }
 
 section_branch() {
@@ -137,18 +137,18 @@ section_branch() {
     say "We're on a feature branch with one commit ahead of main."
     do_cmd "git --no-pager log --oneline main..HEAD"
     say "--branch lints the entire diff that would land in the PR (no staging required)."
-    do_cmd "adr-lint --branch"
+    do_cmd "adrian --branch"
 }
 
 section_lifecycle() {
     banner "Lifecycle: supersede a decision"
     say "We've changed our mind — slog is the new standard."
-    do_cmd "adr-lint create 'Use log/slog for structured logging'"
-    do_cmd "adr-lint accept 2"
-    do_cmd "adr-lint supersede 1 2"
-    do_cmd "adr-lint list"
+    do_cmd "adrian create 'Use log/slog for structured logging'"
+    do_cmd "adrian accept 2"
+    do_cmd "adrian supersede 1 2"
+    do_cmd "adrian list"
     say "supersede wrote both halves of the link — proof in ADR 0001's frontmatter:"
-    do_cmd "adr-lint show 1 | head -8"
+    do_cmd "adrian show 1 | head -8"
 }
 
 case "$SECTION" in

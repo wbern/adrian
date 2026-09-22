@@ -7,7 +7,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/adr"
 )
 
 // Run prints id, status, and title for each ADR under dir. It takes no

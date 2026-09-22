@@ -6,10 +6,27 @@ status: proposed
 date: YYYY-MM-DD
 
 # Optional. Glob patterns (doublestar syntax) that decide which changed
-# files this ADR applies to. Defaults to ["**/*"] if absent.
+# files this ADR applies to. The advisory checker defaults to ["**/*"]
+# if absent; deterministic planning requires an explicit nonempty scope.
 # Negation works: prefix a pattern with "!" to exclude.
 applies_to:
   - "**/*"
+
+# Optional deterministic review requirements. Register each capability in
+# .adrian/review-capabilities.yml first. These name expertise, not agents.
+# review:
+#   requires: [visual-product-judgment]
+#   evidence: [rendered-preview]
+#
+# To give different parts of one ADR different obligations, replace the
+# flat applies_to above with typed scopes (without a top-level review):
+# applies_to:
+#   - paths: ["src/**/*.tsx", "!src/**/*.test.tsx"]
+#     review:
+#       requires: [visual-product-judgment]
+#   - paths: ["src/**/*.test.tsx"]
+#     review:
+#       requires: [test-quality]
 
 # Optional. One of: lite | standard | complex. Controls how aggressively
 # the linter chunks diffs and how much context it sends to the model.
@@ -17,7 +34,8 @@ applies_to:
 complexity: standard
 
 # Optional. Cheap substring pre-filter: if none of these strings appear
-# in the changed-file diff, the LLM call is skipped entirely. Use this
+# in the changed-file diff, the LLM call is skipped entirely (not passed).
+# This never removes deterministic review requirements. Use this
 # for ADRs that forbid specific library names, function calls, etc.
 # Accepts a single string or a list of strings.
 pre_filter:
@@ -32,7 +50,7 @@ pre_filter:
 # isolation without surrounding diff context. Defaults to true.
 diff_context: true
 
-# Optional, set automatically by `adr-lint supersede`. Points at the
+# Optional, set automatically by `adrian supersede`. Points at the
 # replacement ADR's id.
 # superseded_by: "0042"
 ---

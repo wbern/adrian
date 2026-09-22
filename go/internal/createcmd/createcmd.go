@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/adr"
 )
 
 // Run writes a new ADR under dir using the title joined from args, and

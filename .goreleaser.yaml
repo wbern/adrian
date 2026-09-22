@@ -1,20 +1,36 @@
 # goreleaser config — runs on tag push (release-please creates the tag when
 # its Release PR merges). Builds cross-platform binaries, appends them to
 # the GitHub Release that release-please already created, and updates the
-# Homebrew formula in wbern/homebrew-tap.
+# Homebrew formulas in wbern/homebrew-tap. Separate archives and formula
+# binaries let existing adr-lint installations upgrade and coexist with adrian.
 #
 # Local validation: goreleaser check
 # Local dry-run:    goreleaser release --snapshot --clean
 
 version: 2
 
-project_name: adr-lint
+project_name: adrian
 
 before:
   hooks:
     - go -C go mod tidy
 
 builds:
+  - id: adrian
+    main: ./cmd/adrian
+    dir: go
+    binary: adrian
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/wbern/adrian/go/internal/versioncmd.version={{ .Version }}
   - id: adr-lint
     main: ./cmd/adr-lint
     dir: go
@@ -29,12 +45,26 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/wbern/adr-lint/go/internal/versioncmd.version={{ .Version }}
+      - -X github.com/wbern/adrian/go/internal/versioncmd.version={{ .Version }}
 
 archives:
-  - id: default
+  - id: adrian
+    ids: [adrian]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos
+      {{- else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "arm64" }}arm64
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - README.md
+      - CHANGELOG.md
+      - doc/adr/templates/template.md
+  - id: adr-lint
+    ids: [adr-lint]
+    name_template: >-
+      adr-lint_{{ .Version }}_
       {{- if eq .Os "darwin" }}macos
       {{- else }}{{ .Os }}{{ end }}_
       {{- if eq .Arch "amd64" }}x86_64
@@ -63,16 +93,37 @@ release:
   prerelease: auto
 
 brews:
-  - name: adr-lint
+  - name: adrian
+    ids: [adrian]
     repository:
       owner: wbern
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
-    homepage: "https://github.com/wbern/adr-lint"
-    description: "Automatically validates code changes against Architecture Decision Records using Claude."
+    homepage: "https://github.com/wbern/adrian"
+    description: "Validate architecture decisions and derive review requirements from ADRs."
     license: "MIT"
+    install: |
+      bin.install "adrian"
+    test: |
+      system "#{bin}/adrian", "version"
+      system "#{bin}/adrian", "plan", "--help"
+  - name: adr-lint
+    ids: [adr-lint]
+    repository:
+      owner: wbern
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/wbern/adrian"
+    description: "Compatibility command for ADRian architecture decision tooling."
+    license: "MIT"
+    caveats: |
+      adr-lint is the deprecated command name for ADRian, with the same implementation.
+      Install wbern/tap/adrian and update scripts to use adrian when convenient.
+      Both formulas can be installed together; this formula continues to receive updates.
     install: |
       bin.install "adr-lint"
     test: |
       system "#{bin}/adr-lint", "version"
+      system "#{bin}/adr-lint", "plan", "--help"

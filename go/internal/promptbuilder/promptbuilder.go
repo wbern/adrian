@@ -8,7 +8,7 @@ package promptbuilder
 import (
 	"strings"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/adr"
 )
 
 const staticInstructionsHeader = "You are a code lint checker. Check if the code changes below violate the requirement that will be specified at the end.\n" +

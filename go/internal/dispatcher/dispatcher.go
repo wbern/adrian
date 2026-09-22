@@ -28,20 +28,25 @@ type Command struct {
 // registered subcommand. Passing `--help` or `-h` to any registered
 // subcommand prints that subcommand's Usage instead of running it.
 func Dispatch(args []string, dir string, out io.Writer, subs map[string]Command) (bool, error) {
+	return DispatchNamed("adr-lint", args, dir, out, subs)
+}
+
+// DispatchNamed allows both executable names to share commands and help.
+func DispatchNamed(name string, args []string, dir string, out io.Writer, subs map[string]Command) (bool, error) {
 	if len(args) == 0 {
 		return false, nil
 	}
 	first := args[0]
+	if first == "help" || first == "--help" || first == "-h" {
+		printHelp(name, out, subs)
+		return true, nil
+	}
 	if first == "" || first[0] == '-' {
 		return false, nil
 	}
-	if first == "help" || first == "--help" || first == "-h" {
-		printHelp(out, subs)
-		return true, nil
-	}
 	cmd, ok := subs[first]
 	if !ok {
-		return true, fmt.Errorf("unknown command: %s\n\nRun `adr-lint help` for usage", first)
+		return true, fmt.Errorf("unknown command: %s\n\nRun `%s help` for usage", first, name)
 	}
 	rest := args[1:]
 	if hasHelpFlag(rest) {
@@ -60,13 +65,13 @@ func hasHelpFlag(args []string) bool {
 	return false
 }
 
-func printHelp(out io.Writer, subs map[string]Command) {
+func printHelp(name string, out io.Writer, subs map[string]Command) {
 	names := make([]string, 0, len(subs))
 	for name := range subs {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	fmt.Fprintln(out, "Usage: adr-lint [subcommand] [args...]")
+	fmt.Fprintf(out, "Usage: %s [subcommand] [args...]\n", name)
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Subcommands:")
 	for _, n := range names {
@@ -77,5 +82,5 @@ func printHelp(out io.Writer, subs map[string]Command) {
 		}
 	}
 	fmt.Fprintln(out)
-	fmt.Fprintln(out, "Without a subcommand, adr-lint runs the linter against staged changes.")
+	fmt.Fprintf(out, "Without a subcommand, %s runs the linter against staged changes.\n", name)
 }

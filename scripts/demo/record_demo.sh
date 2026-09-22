@@ -53,13 +53,13 @@ if [[ ${#SECTIONS[@]} -eq 0 ]]; then
     SECTIONS=(duet create lint branch lifecycle)
 fi
 
-echo "==> Building adr-lint binary into $TMP_BIN"
-(cd "$REPO_ROOT/go" && go build -o "$TMP_BIN/adr-lint" ./cmd/adr-lint)
+echo "==> Building adrian binary into $TMP_BIN"
+(cd "$REPO_ROOT/go" && go build -o "$TMP_BIN/adrian" ./cmd/adrian)
 
 # Workspace each scenario boots into. We avoid /tmp because macOS resolves
-# it to /private/tmp via git rev-parse, which leaks into adr-lint's
+# it to /private/tmp via git rev-parse, which leaks into adrian's
 # "Created /private/tmp/..." output and clutters the GIF.
-WORKSPACE_ROOT="${HOME:?HOME must be set}/.adr-lint-demo-workspace"
+WORKSPACE_ROOT="${HOME:?HOME must be set}/.adrian-demo-workspace"
 rm -rf "$WORKSPACE_ROOT"
 mkdir -p "$WORKSPACE_ROOT"
 trap 'rm -rf "$WORKSPACE_ROOT"' EXIT
@@ -74,7 +74,7 @@ record_one() {
 
     # Bootstrap the workspace silently outside the recording. Every demo
     # assumes a fresh git repo named my-project; nothing is gained by making
-    # the viewer watch `mkdir`, `git init`, and adr-lint version/help.
+    # the viewer watch `mkdir`, `git init`, and adrian version/help.
     local proj="$workdir/my-project"
     echo "==> Bootstrapping workspace for: $section (silent)"
     (
@@ -140,7 +140,7 @@ GOFILE
     fi
 
     # Inherit the outer env (so `claude` can find its config + auth) but
-    # prepend $TMP_BIN to PATH so the freshly-built adr-lint wins.
+    # prepend $TMP_BIN to PATH so the freshly-built adrian wins.
     PATH="$TMP_BIN:$PATH" \
         TYPE_SPEED="${TYPE_SPEED:-0.025}" \
         BEAT="${BEAT:-1.2}" \

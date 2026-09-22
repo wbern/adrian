@@ -3,7 +3,7 @@
   "packages": {
     ".": {
       "release-type": "go",
-      "package-name": "adr-lint",
+      "package-name": "adrian",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "changelog-path": "CHANGELOG.md",

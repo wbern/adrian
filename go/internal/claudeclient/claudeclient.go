@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
-	"github.com/wbern/adr-lint/go/internal/promptbuilder"
-	"github.com/wbern/adr-lint/go/internal/responseparser"
-	"github.com/wbern/adr-lint/go/internal/responseschema"
-	"github.com/wbern/adr-lint/go/internal/types"
+	"github.com/wbern/adrian/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/promptbuilder"
+	"github.com/wbern/adrian/go/internal/responseparser"
+	"github.com/wbern/adrian/go/internal/responseschema"
+	"github.com/wbern/adrian/go/internal/types"
 )
 
 // ClaudeTimeout is the wall-clock budget for one `claude` invocation.

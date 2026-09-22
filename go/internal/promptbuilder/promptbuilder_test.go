@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wbern/adr-lint/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/adr"
 )
 
 func sampleADR() adr.ADR {

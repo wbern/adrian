@@ -1,4 +1,4 @@
-module github.com/wbern/adr-lint/go
+module github.com/wbern/adrian/go
 
 go 1.25.0
 
