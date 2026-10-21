@@ -4,6 +4,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/wbern/adrian/go/internal/gitcontext"
 	"github.com/wbern/adrian/go/internal/listcmd"
 	"github.com/wbern/adrian/go/internal/plancmd"
+	"github.com/wbern/adrian/go/internal/planexec"
 	"github.com/wbern/adrian/go/internal/rejectcmd"
 	"github.com/wbern/adrian/go/internal/runner"
 	"github.com/wbern/adrian/go/internal/showcmd"
@@ -48,6 +50,43 @@ func Run(name string, args []string, out, errOut io.Writer) int {
 	if len(args) > 0 && args[0] == "check" {
 		args = args[1:]
 	}
+	// Plan commands resolve Git only through the sanitized immutable reader.
+	// Do not obtain their repository root through legacy environment-sensitive
+	// discovery or load the checkout's dotenv/provider configuration.
+	if len(args) > 0 && (args[0] == "plan" || args[0] == "code-plan") {
+		usage := plancmd.Usage
+		if args[0] == "code-plan" {
+			usage = plancmd.CodeUsage
+		}
+		if len(args) == 2 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Fprintln(out, strings.ReplaceAll(usage, "adrian", name))
+			return 0
+		}
+		dir, err := os.Getwd()
+		if err == nil {
+			if args[0] == "code-plan" {
+				err = plancmd.RunCodeCLI(args[1:], dir, out)
+			} else {
+				err = plancmd.RunCLI(args[1:], dir, out)
+			}
+		}
+		if err != nil {
+			fmt.Fprintln(errOut, err)
+			return 1
+		}
+		return 0
+	}
+	if len(args) > 0 && args[0] == "execute-plan" {
+		if len(args) == 2 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Fprintln(out, strings.ReplaceAll(planexec.Usage, "adrian", name))
+			return 0
+		}
+		if err := planexec.RunCommand(args[1:], "", out); err != nil {
+			fmt.Fprintln(errOut, err)
+			return 1
+		}
+		return 0
+	}
 	git := gitcontext.NewDefaultClient()
 	adrDir := filepath.Join(git.GitRoot(), adr.DirName)
 	commands := map[string]dispatcher.Command{}
@@ -56,6 +95,8 @@ func Run(name string, args []string, out, errOut io.Writer) int {
 		commands[key] = command
 	}
 	commands["plan"] = dispatcher.Command{Run: plancmd.Run, Usage: plancmd.Usage}
+	commands["code-plan"] = dispatcher.Command{Run: plancmd.RunCode, Usage: plancmd.CodeUsage}
+	commands["execute-plan"] = dispatcher.Command{Run: planexec.RunCommand, Usage: planexec.Usage}
 	commands["version"] = dispatcher.Command{Run: func(args []string, dir string, w io.Writer) error { return versioncmd.RunNamed(name, args, dir, w) }, Usage: name + " version"}
 
 	handled, err := dispatcher.DispatchNamed(name, args, adrDir, out, commands)

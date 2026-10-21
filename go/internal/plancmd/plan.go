@@ -4,14 +4,15 @@ package plancmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/wbern/adrian/go/internal/reviewplan"
@@ -29,7 +30,14 @@ func RunCLI(args []string, dir string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	git := gitReader{dir: dir}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	git := gitReader{dir: dir, ctx: ctx}
+	root, err := git.run("rev-parse", "--show-toplevel")
+	if err != nil {
+		return err
+	}
+	git.dir = strings.TrimSpace(string(root))
 	base, err := git.commit(opts["--base"])
 	if err != nil {
 		return err
@@ -53,7 +61,7 @@ func RunCLI(args []string, dir string, out io.Writer) error {
 	if !commitID.MatchString(mergeBase) {
 		return fmt.Errorf("invalid merge base returned by Git")
 	}
-	manifest, err := git.run("diff", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--name-status", "-z", "--find-renames", mergeBase, head, "--")
+	manifest, err := git.run("diff", "--no-relative", "--no-color", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--name-status", "-z", "--find-renames", mergeBase, head, "--")
 	if err != nil {
 		return err
 	}
@@ -104,21 +112,15 @@ func parseArgs(args []string) (map[string]string, error) {
 	return values, nil
 }
 
-type gitReader struct{ dir string }
+type gitReader struct {
+	dir string
+	ctx context.Context
+}
 
 var commitID = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
 
-func (g gitReader) run(args ...string) ([]byte, error) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = g.dir
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git %s: %w: %s", args[0], err, strings.TrimSpace(stderr.String()))
-	}
-	return out, nil
-}
+func (g gitReader) run(args ...string) ([]byte, error) { return g.runBounded(args...) }
+
 func (g gitReader) commit(ref string) (string, error) {
 	raw, err := g.run("rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
 	if err != nil {
@@ -178,12 +180,17 @@ func (g gitReader) readPolicy(commit string) (reviewpolicy.Registry, []reviewpol
 	if err != nil {
 		return registry, nil, fmt.Errorf("%s: %w", reviewpolicy.RegistryPath, err)
 	}
+	policyBytes := len(raw) + len(contents)
 	policies := make([]reviewpolicy.ADR, 0, len(adrs))
 	seen := map[string]bool{}
 	for _, item := range adrs {
 		contents, err = g.run("cat-file", "blob", item.oid)
 		if err != nil {
 			return registry, nil, err
+		}
+		policyBytes += len(contents)
+		if policyBytes > maxCodePlanBytes {
+			return registry, nil, fmt.Errorf("policy set exceeds byte budget")
 		}
 		a, err := reviewpolicy.ParseADR(item.path, contents, registry)
 		if err != nil {
