@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/wbern/adrian/compare/v0.4.0...v0.5.0) (2026-10-22)
+
+
+### Features
+
+* add subagent segmentation review options, custom agent commands, and json/markdown formats ([#19](https://github.com/wbern/adrian/issues/19)) ([f827015](https://github.com/wbern/adrian/commit/f82701535b46eb4c65d8e6c1b5f41ab9c0b30be2))
+
 ## [0.4.0](https://github.com/wbern/adrian/compare/v0.3.1...v0.4.0) (2026-10-22)
 
 
