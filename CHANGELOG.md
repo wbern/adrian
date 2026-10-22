@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/wbern/adrian/compare/v0.6.0...v0.6.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **parser:** accept violation or reasoning when explanation is omitted in fail responses ([78a54f3](https://github.com/wbern/adrian/commit/78a54f33a362c505bb5b665077f4c6fcf858b886))
+
 ## [0.6.0](https://github.com/wbern/adrian/compare/v0.5.0...v0.6.0) (2026-10-22)
 
 
