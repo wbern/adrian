@@ -10,6 +10,7 @@ type Provider string
 
 const (
 	ProviderClaude Provider = "claude"
+	ProviderCustom Provider = "custom"
 )
 
 // ResultStatus is one of PASS/FAIL/WARN/ERROR/SKIPPED.
@@ -81,6 +82,13 @@ type LintOptions struct {
 	// for detecting a pre_filter whose terms no longer match the rule it
 	// guards, which otherwise fails silently as a pass.
 	NoPreFilter bool
+
+	// Format controls stdout rendering: "text" (default), "json", "markdown".
+	Format string
+
+	// AgentCmd executes a custom agent binary or shell command for checking.
+	// When provided, the prompt is piped on stdin and structured output is read from stdout.
+	AgentCmd string
 }
 
 // LintResult is the outcome of checking a single ADR against a diff.

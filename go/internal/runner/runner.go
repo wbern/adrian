@@ -391,7 +391,22 @@ func runOnePair(
 		}
 	}
 
-	cfg, ok := ProviderModelFor(opts.Provider, a.Complexity)
+	var cfg ComplexityConfig
+	var ok bool
+	if opts.Provider == types.ProviderCustom {
+		model := "custom"
+		if opts.AgentCmd != "" {
+			model = opts.AgentCmd
+		}
+		cfg = ComplexityConfig{
+			Model:             model,
+			MaxTokensPerChunk: 4000,
+			MaxOutputTokens:   1000,
+		}
+		ok = true
+	} else {
+		cfg, ok = ProviderModelFor(opts.Provider, a.Complexity)
+	}
 	if !ok {
 		return types.LintResult{
 			ADR:         a,
@@ -509,6 +524,17 @@ type Summary struct {
 
 // PrintResults renders LintResults and a summary to w.
 func PrintResults(w io.Writer, results []types.LintResult, opts types.LintOptions) {
+	if opts.Format == "json" {
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(results)
+		return
+	}
+	if opts.Format == "markdown" {
+		fmt.Fprintln(w, GenerateMarkdownReport(results))
+		return
+	}
+
 	fmt.Fprint(w, "\n=== ADR Lint Results ===\n\n")
 
 	for _, r := range results {

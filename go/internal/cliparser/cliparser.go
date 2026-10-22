@@ -14,6 +14,7 @@ import (
 
 var validProviders = []types.Provider{
 	types.ProviderClaude,
+	types.ProviderCustom,
 }
 
 func isProvider(s string) bool {
@@ -59,6 +60,35 @@ func ParseArgs(args []string) (types.LintOptions, error) {
 	}
 	if err := resolveParallel(args, &opts); err != nil {
 		return opts, err
+	}
+
+	if slices.Contains(args, "--json") {
+		opts.Format = "json"
+	}
+	if slices.Contains(args, "--markdown") {
+		opts.Format = "markdown"
+	}
+	if err := resolveValueFlag(args, "--format", &opts.Format); err != nil {
+		return opts, err
+	}
+	if opts.Format != "" && opts.Format != "text" && opts.Format != "json" && opts.Format != "markdown" {
+		return opts, fmt.Errorf("invalid --format value %q: must be one of: text, json, markdown", opts.Format)
+	}
+	if opts.Format == "" {
+		opts.Format = "text"
+	}
+
+	if err := resolveValueFlag(args, "--agent-cmd", &opts.AgentCmd); err != nil {
+		return opts, err
+	}
+	if opts.AgentCmd == "" {
+		opts.AgentCmd = os.Getenv("ADRIAN_AGENT_CMD")
+		if opts.AgentCmd == "" {
+			opts.AgentCmd = os.Getenv("ADR_LINT_AGENT_CMD")
+		}
+	}
+	if opts.AgentCmd != "" && opts.Provider == types.ProviderClaude && !slices.Contains(args, "--provider") && !slices.Contains(args, "--provider=claude") {
+		opts.Provider = types.ProviderCustom
 	}
 
 	return opts, nil
@@ -227,6 +257,10 @@ func resolveProvider(args []string, opts *types.LintOptions) error {
 			opts.Provider = types.Provider(val)
 			return nil
 		}
+	}
+	if env := os.Getenv("ADRIAN_PROVIDER"); isProvider(env) {
+		opts.Provider = types.Provider(env)
+		return nil
 	}
 	if env := os.Getenv("ADR_LINT_PROVIDER"); isProvider(env) {
 		opts.Provider = types.Provider(env)

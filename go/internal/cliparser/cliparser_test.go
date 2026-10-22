@@ -217,3 +217,63 @@ func TestParseArgs_ParallelZeroErrors(t *testing.T) {
 		t.Errorf("err = %q", err.Error())
 	}
 }
+
+func TestParseArgs_FormatFlags(t *testing.T) {
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{}, "text"},
+		{[]string{"--json"}, "json"},
+		{[]string{"--markdown"}, "markdown"},
+		{[]string{"--format", "json"}, "json"},
+		{[]string{"--format=markdown"}, "markdown"},
+		{[]string{"--format", "text"}, "text"},
+	}
+	for _, c := range cases {
+		got, err := ParseArgs(c.args)
+		if err != nil {
+			t.Fatalf("ParseArgs(%v): %v", c.args, err)
+		}
+		if got.Format != c.want {
+			t.Errorf("ParseArgs(%v).Format = %q, want %q", c.args, got.Format, c.want)
+		}
+	}
+}
+
+func TestParseArgs_InvalidFormatErrors(t *testing.T) {
+	_, err := ParseArgs([]string{"--format", "yaml"})
+	if err == nil {
+		t.Fatal("expected error for invalid format")
+	}
+	if !strings.Contains(err.Error(), `invalid --format value "yaml"`) {
+		t.Errorf("err = %q", err.Error())
+	}
+}
+
+func TestParseArgs_AgentCmd(t *testing.T) {
+	got, err := ParseArgs([]string{"--agent-cmd", "my-agent-cli --model fast"})
+	if err != nil {
+		t.Fatalf("ParseArgs: %v", err)
+	}
+	if got.AgentCmd != "my-agent-cli --model fast" {
+		t.Errorf("AgentCmd = %q", got.AgentCmd)
+	}
+	if got.Provider != types.ProviderCustom {
+		t.Errorf("Provider = %q, want custom", got.Provider)
+	}
+}
+
+func TestParseArgs_AgentCmdEnv(t *testing.T) {
+	t.Setenv("ADRIAN_AGENT_CMD", "env-agent-cli")
+	got, err := ParseArgs([]string{})
+	if err != nil {
+		t.Fatalf("ParseArgs: %v", err)
+	}
+	if got.AgentCmd != "env-agent-cli" {
+		t.Errorf("AgentCmd = %q", got.AgentCmd)
+	}
+	if got.Provider != types.ProviderCustom {
+		t.Errorf("Provider = %q, want custom", got.Provider)
+	}
+}
