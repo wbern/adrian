@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/wbern/adrian/compare/v0.3.1...v0.4.0) (2026-10-22)
+
+
+### Features
+
+* **planning:** export complete shared code review inputs ([4449e7c](https://github.com/wbern/adrian/commit/4449e7c436042439a07d9ab64429a3bd14fdc348))
+* **planning:** export complete shared code review inputs ([d82106c](https://github.com/wbern/adrian/commit/d82106ccf85ec594b312b1507c2a6f1ac04dd7ac))
+
 ## [0.3.1](https://github.com/wbern/adrian/compare/v0.3.0...v0.3.1) (2026-09-22)
 
 
