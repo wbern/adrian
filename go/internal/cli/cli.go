@@ -203,7 +203,7 @@ func makeCommandLintFn(cmdStr string) cache.LintFn {
 			tmp, err := os.CreateTemp("", "adrian-matched-files-*.txt")
 			if err == nil {
 				manifestPath := tmp.Name()
-				defer os.Remove(manifestPath)
+				defer func() { _ = os.Remove(manifestPath) }()
 				for _, f := range a.MatchedFiles {
 					_, _ = tmp.WriteString(f + "\n")
 				}

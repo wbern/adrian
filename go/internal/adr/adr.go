@@ -100,10 +100,10 @@ func (s *DiffContextSetting) UnmarshalYAML(n *yaml.Node) error {
 // one-element slice so the "any pattern matches" semantics hold.
 // EnforcedBy is *string to distinguish "missing" from "empty".
 type ADR struct {
-	ID              string
-	Title           string
-	Status          Status
-	AppliesTo       []string
+	ID        string
+	Title     string
+	Status    Status
+	AppliesTo []string
 	// AppliesToScopes keeps each typed scope's exclusions local to that scope.
 	AppliesToScopes [][]string
 	Complexity      Complexity
