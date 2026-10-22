@@ -146,6 +146,15 @@ func (c *Client) GetFilesChangedAgainstMain(targetRef string) []string {
 	return parseLines(out)
 }
 
+// GetTrackedFiles returns the relative paths of all files tracked by git.
+func (c *Client) GetTrackedFiles() []string {
+	out, err := c.run([]string{"ls-files"})
+	if err != nil {
+		return nil
+	}
+	return parseLines(out)
+}
+
 func parseLines(s string) []string {
 	parts := strings.Split(s, "\n")
 	out := make([]string, 0, len(parts))

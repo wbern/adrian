@@ -284,3 +284,14 @@ func TestGetStagedDiffForFiles_DefaultsToWContextFlag(t *testing.T) {
 		t.Errorf("expected -W in args, got %v", call)
 	}
 }
+
+func TestGetTrackedFiles(t *testing.T) {
+	rr := newDefaultRunner("file1.go\nfile2.ts\nREADME.md\n")
+	c := NewClient(rr.Run)
+
+	files := c.GetTrackedFiles()
+	want := []string{"file1.go", "file2.ts", "README.md"}
+	if !slices.Equal(files, want) {
+		t.Errorf("GetTrackedFiles() = %v, want %v", files, want)
+	}
+}

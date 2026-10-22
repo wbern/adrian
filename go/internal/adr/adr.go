@@ -161,7 +161,10 @@ func DecodeSuccessorIDs(n *yaml.Node) ([]string, error) {
 		if node.Kind != yaml.ScalarNode || (node.Tag != "!!str" && node.Tag != "!!int") {
 			return nil, fmt.Errorf("superseded_by entries must be ADR IDs")
 		}
-		id, err := strconv.Atoi(strings.TrimSpace(node.Value))
+		rawVal := strings.TrimSpace(node.Value)
+		cleanVal := strings.TrimPrefix(strings.TrimPrefix(rawVal, "ADR-"), "adr-")
+		cleanVal = strings.TrimPrefix(strings.TrimPrefix(cleanVal, "ADR"), "adr")
+		id, err := strconv.Atoi(strings.TrimSpace(cleanVal))
 		if err != nil || id < 0 || id > 9999 {
 			return nil, fmt.Errorf("invalid superseded_by successor %q", node.Value)
 		}
@@ -644,7 +647,10 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 // 4-digit zero-padded form used by ADR filenames and the management
 // commands. Non-numeric input is returned unchanged.
 func NormalizeID(s string) string {
-	if n, err := strconv.Atoi(s); err == nil {
+	clean := strings.TrimSpace(s)
+	clean = strings.TrimPrefix(strings.TrimPrefix(clean, "ADR-"), "adr-")
+	clean = strings.TrimPrefix(strings.TrimPrefix(clean, "ADR"), "adr")
+	if n, err := strconv.Atoi(clean); err == nil {
 		return fmt.Sprintf("%04d", n)
 	}
 	return s

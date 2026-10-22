@@ -16,6 +16,7 @@ import (
 
 	"github.com/wbern/adrian/go/internal/acceptcmd"
 	"github.com/wbern/adrian/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/auditcmd"
 	"github.com/wbern/adrian/go/internal/cache"
 	"github.com/wbern/adrian/go/internal/claudeclient"
 	"github.com/wbern/adrian/go/internal/cliparser"
@@ -50,6 +51,8 @@ var subcommands = map[string]dispatcher.Command{
 	"version":   {Run: versioncmd.Run, Usage: "adrian version"},
 	"list":      {Run: listcmd.Run, Usage: "adrian list"},
 	"validate":  {Run: validatecmd.Run, Usage: "adrian validate"},
+	"audit":     {Run: auditcmd.Run, Usage: "adrian audit [--strict] [--format text|json] [--all]"},
+	"doctor":    {Run: auditcmd.Run, Usage: "adrian doctor [--strict] [--format text|json] [--all]"},
 }
 
 // Run returns an exit code and keeps machine-readable plan output isolated

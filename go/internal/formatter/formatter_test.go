@@ -169,4 +169,17 @@ func TestCheckPreFilter_ArrayPatternsNoMatch(t *testing.T) {
 	}
 }
 
+func TestCheckPreFilter_StemAndCaseInsensitive(t *testing.T) {
+	a := mockADR()
+	a.PreFilter = []string{"mutation"}
+	// Stem: mutation matches authedMutatingRpc
+	if got := CheckPreFilter(a, "+ export const authedMutatingRpc = createProcedure();"); got != nil {
+		t.Errorf("expected nil (stem match), got %+v", got)
+	}
+	// Case-insensitive
+	if got := CheckPreFilter(a, "+ const MUTATION = true;"); got != nil {
+		t.Errorf("expected nil (case-insensitive match), got %+v", got)
+	}
+}
+
 var _ = strings.Contains

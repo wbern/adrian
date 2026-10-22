@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/wbern/adrian/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/prefilter"
 	"github.com/wbern/adrian/go/internal/types"
 )
 
@@ -97,40 +98,8 @@ func FormatTokenStats(results []types.LintResult) string {
 
 // CheckPreFilter short-circuits the LLM call when the diff contains
 // none of the trigger patterns in adr.PreFilter. Returns a synthetic
-// PASS result when no patterns match, or nil when the LLM should
+// StatusSKIPPED result when no patterns match, or nil when the LLM should
 // still be invoked.
 func CheckPreFilter(a adr.ADR, diff string) *types.LintResult {
-	if len(a.PreFilter) == 0 {
-		return nil
-	}
-	for _, p := range a.PreFilter {
-		if strings.Contains(diff, p) {
-			return nil
-		}
-	}
-
-	quoted := make([]string, len(a.PreFilter))
-	for i, p := range a.PreFilter {
-		quoted[i] = `"` + p + `"`
-	}
-	patternDesc := strings.Join(quoted, " or ")
-
-	// NOT EVALUATED, not passed. Nothing checked this rule, so claiming PASS
-	// makes an unenforced rule indistinguishable from an enforced one — and
-	// anything counting passes, a merge gate most of all, then over-reports how
-	// much policy it actually applied.
-	//
-	// Measured on crm PR #1302: 9 ADRs were pre-filtered and 2 of them FAIL when
-	// actually checked. ADR-0011 forbids transport-layer mocking but its filter
-	// lists only flaky-test idioms; ADR-0059 is architectural but its filter
-	// lists implementation tokens. Both filters covered ONE CLAUSE of a
-	// multi-clause rule, and both reported PASS with high confidence.
-	//
-	// No Confidence either: no model ran, so there is no verdict to be
-	// confident about. Asserting "high" was the most misleading part.
-	return &types.LintResult{
-		ADR:         a,
-		Status:      types.StatusSKIPPED,
-		Explanation: "Not evaluated (pre-filter: " + patternDesc + " not found in diff). This rule was NOT checked.",
-	}
+	return prefilter.Check(a, diff)
 }
