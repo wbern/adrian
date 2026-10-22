@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/wbern/adrian/compare/v0.6.1...v0.7.0) (2026-10-22)
+
+
+### Features
+
+* **audit:** implement stem pre-filter matching and adrian audit command ([1878ab1](https://github.com/wbern/adrian/commit/1878ab1a028dea5c207927333fe7577efb2b8507))
+
 ## [0.6.1](https://github.com/wbern/adrian/compare/v0.6.0...v0.6.1) (2026-10-22)
 
 
