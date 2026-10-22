@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/wbern/adrian/go/internal/adr"
 	"github.com/wbern/adrian/go/internal/logger"
@@ -26,13 +27,17 @@ type Provider string
 // Field order and names are load-bearing — changing either invalidates
 // every existing cache entry.
 type keyInput struct {
-	V         string   `json:"v"`
-	ADRID     string   `json:"adrId"`
-	Decision  string   `json:"decision"`
-	PreFilter []string `json:"preFilter,omitempty"`
-	Diff      string   `json:"diff"`
-	Model     string   `json:"model"`
-	Provider  Provider `json:"provider"`
+	V               string   `json:"v"`
+	ADRID           string   `json:"adrId"`
+	ADRTitle        string   `json:"adrTitle,omitempty"`
+	Complexity      string   `json:"complexity,omitempty"`
+	Decision        string   `json:"decision"`
+	PreFilter       []string `json:"preFilter,omitempty"`
+	Diff            string   `json:"diff"`
+	DiffContextMode string   `json:"diffContextMode,omitempty"`
+	FullFilesHash   string   `json:"fullFilesHash,omitempty"`
+	Model           string   `json:"model"`
+	Provider        Provider `json:"provider"`
 }
 
 // LintFn produces a LintResult for a given (ADR, diff) pair.
@@ -96,7 +101,7 @@ func GetCacheDir() string {
 }
 
 // SetCachedResult writes a LintResult under key in cacheDir, creating
-// the directory tree if needed.
+// the directory tree if needed, using an atomic write pattern.
 func SetCachedResult(key string, r types.LintResult, cacheDir string) error {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return err
@@ -105,7 +110,22 @@ func SetCachedResult(key string, r types.LintResult, cacheDir string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(cacheDir, key+".json"), data, 0o644)
+	targetPath := filepath.Join(cacheDir, key+".json")
+	tmp, err := os.CreateTemp(cacheDir, key+"-*.tmp")
+	if err != nil {
+		return os.WriteFile(targetPath, data, 0o644)
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, targetPath)
 }
 
 // GetCachedResult reads a previously-stored LintResult for key, or
@@ -127,16 +147,40 @@ func GetCachedResult(key, cacheDir string) (*types.LintResult, error) {
 	return &r, nil
 }
 
+func computeFullFilesHash(files map[string]adr.FileRecord) string {
+	if len(files) == 0 {
+		return ""
+	}
+	h := sha256.New()
+	paths := make([]string, 0, len(files))
+	for p := range files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, p := range paths {
+		rec := files[p]
+		h.Write([]byte(p))
+		h.Write([]byte{0})
+		h.Write([]byte(rec.Content))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // BuildCacheKey returns the hex SHA-256 of the input tuple.
 func BuildCacheKey(a adr.ADR, diff, model string, provider Provider) string {
 	payload, _ := json.Marshal(keyInput{
-		V:         cacheVersion,
-		ADRID:     a.ID,
-		Decision:  a.Decision,
-		PreFilter: a.PreFilter,
-		Diff:      diff,
-		Model:     model,
-		Provider:  provider,
+		V:               cacheVersion,
+		ADRID:           a.ID,
+		ADRTitle:        a.Title,
+		Complexity:      string(a.Complexity),
+		Decision:        a.Decision,
+		PreFilter:       a.PreFilter,
+		Diff:            diff,
+		DiffContextMode: string(a.DiffContextMode),
+		FullFilesHash:   computeFullFilesHash(a.FullFiles),
+		Model:           model,
+		Provider:        provider,
 	})
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])

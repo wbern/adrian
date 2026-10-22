@@ -6,6 +6,7 @@
 package promptbuilder
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/wbern/adrian/go/internal/adr"
@@ -77,6 +78,13 @@ const criticalReminder = "\n### ⚠️ REMINDER — Only added lines matter ⚠�
 	"- To report FAIL, you MUST quote code from an added line (prefixed with `+`)\n" +
 	"- Each file must independently comply. If ANY single file violates the requirement, the overall result is FAIL — even if other files are compliant.\n"
 
+const fullContextEvaluationGuidance = "\n### ⚠️ EVALUATION GUIDANCE (Full Context Mode) ⚠️\n" +
+	"- Verify that changes in the git diff adhere to the ADR.\n" +
+	"- You may also flag violations for missing required structural elements, missing exports, or broken file-wide invariants visible in the full file contents.\n" +
+	"- For diff-level code violations, cite the specific lines in the diff.\n" +
+	"- For structural absences or missing requirements, cite the affected file path from <matched_file> and explain what required pattern is missing.\n" +
+	"- Each file must independently comply. If ANY single file violates the requirement, the overall result is FAIL — even if other files are compliant.\n"
+
 // BuildPrompt returns the full prompt for one ADR / diff pair. The
 // returned string is intentionally long: providers' prefix caches deduplicate
 // the static portion across calls, so verbosity here is essentially free.
@@ -87,12 +95,44 @@ func BuildPrompt(a adr.ADR, diff string) string {
 	b.WriteString("\n")
 	b.WriteString(staticInstructionsFooter)
 	b.WriteString(guardrailsFor(a.Complexity))
-	b.WriteString(criticalReminder)
+	if a.DiffContextMode == adr.DiffContextFull && len(a.FullFiles) > 0 {
+		b.WriteString("\n### Full File Context for Matched Files (OVERRIDE: You may flag violations for missing required exports, structural absences, or file-wide invariants in these files):\n")
+		paths := make([]string, 0, len(a.FullFiles))
+		for p := range a.FullFiles {
+			paths = append(paths, p)
+		}
+		sort.Strings(paths)
+		for _, p := range paths {
+			rec := a.FullFiles[p]
+			b.WriteString("<matched_file path=\"")
+			b.WriteString(escapeAttr(p))
+			b.WriteString("\">\n")
+			safeContent := strings.ReplaceAll(rec.Content, "</matched_file>", "&lt;/matched_file&gt;")
+			b.WriteString(safeContent)
+			if !strings.HasSuffix(safeContent, "\n") {
+				b.WriteString("\n")
+			}
+			b.WriteString("</matched_file>\n\n")
+		}
+	}
+	if a.DiffContextMode == adr.DiffContextFull {
+		b.WriteString(fullContextEvaluationGuidance)
+	} else {
+		b.WriteString(criticalReminder)
+	}
 	b.WriteString("\n### ADR Requirement to Check: ")
 	b.WriteString(a.Title)
 	b.WriteString("\n\n")
 	b.WriteString(a.Decision)
 	return b.String()
+}
+
+func escapeAttr(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
 }
 
 func guardrailsFor(c adr.Complexity) string {

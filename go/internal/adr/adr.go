@@ -40,6 +40,61 @@ const (
 // and writes ADR files.
 const DirName = "doc/adr"
 
+// DiffContextMode selects how much surrounding code is included when linting.
+type DiffContextMode string
+
+const (
+	// DiffContextFunction includes the enclosing function/method (git diff -W). This is the default.
+	DiffContextFunction DiffContextMode = "function"
+	// DiffContextNone includes zero surrounding context lines (git diff -U0).
+	DiffContextNone DiffContextMode = "none"
+	// DiffContextFull includes the git diff PLUS the full contents of all matched changed files.
+	DiffContextFull DiffContextMode = "full"
+)
+
+// FileRecord represents a safe snapshot of a file for whole-file context inspection.
+type FileRecord struct {
+	Path      string `json:"path"`
+	Content   string `json:"content"`
+	IsBinary  bool   `json:"is_binary,omitempty"`
+	IsDeleted bool   `json:"is_deleted,omitempty"`
+	Truncated bool   `json:"truncated,omitempty"`
+}
+
+// DiffContextSetting parses boolean or string diff_context values from frontmatter.
+type DiffContextSetting struct {
+	Mode DiffContextMode
+}
+
+func (s *DiffContextSetting) UnmarshalYAML(n *yaml.Node) error {
+	var b bool
+	if err := n.Decode(&b); err == nil {
+		if b {
+			s.Mode = DiffContextFunction
+		} else {
+			s.Mode = DiffContextNone
+		}
+		return nil
+	}
+	var str string
+	if err := n.Decode(&str); err == nil {
+		switch strings.ToLower(strings.TrimSpace(str)) {
+		case "none", "false", "u0", "hunk":
+			s.Mode = DiffContextNone
+			return nil
+		case "function", "true", "func", "w":
+			s.Mode = DiffContextFunction
+			return nil
+		case "full", "whole", "file", "all":
+			s.Mode = DiffContextFull
+			return nil
+		default:
+			return fmt.Errorf("invalid diff_context %q: must be 'none', 'function', or 'full'", str)
+		}
+	}
+	return fmt.Errorf("diff_context must be a boolean or string ('none', 'function', 'full')")
+}
+
 // ADR is the parsed representation of a single ADR file. PreFilter is
 // always a slice; a single-string YAML value is normalized to a
 // one-element slice so the "any pattern matches" semantics hold.
@@ -58,20 +113,23 @@ type ADR struct {
 	PreFilter       []string
 	EnforcedBy      *string
 	DiffContext     bool
+	DiffContextMode DiffContextMode
+	MatchedFiles    []string
+	FullFiles       map[string]FileRecord
 	SupersededBy    []string
 }
 
 // frontmatter is the raw shape of the YAML block; field types accept the
 // union shapes the original parser handled.
 type frontmatter struct {
-	Status       string            `yaml:"status"`
-	Date         string            `yaml:"date"`
-	AppliesTo    appliesToPatterns `yaml:"applies_to"`
-	Complexity   string            `yaml:"complexity"`
-	PreFilter    interface{}       `yaml:"pre_filter"`
-	EnforcedBy   string            `yaml:"enforced_by"`
-	DiffContext  *bool             `yaml:"diff_context"`
-	SupersededBy successorIDs      `yaml:"superseded_by"`
+	Status       string              `yaml:"status"`
+	Date         string              `yaml:"date"`
+	AppliesTo    appliesToPatterns   `yaml:"applies_to"`
+	Complexity   string              `yaml:"complexity"`
+	PreFilter    interface{}         `yaml:"pre_filter"`
+	EnforcedBy   string              `yaml:"enforced_by"`
+	DiffContext  *DiffContextSetting `yaml:"diff_context"`
+	SupersededBy successorIDs        `yaml:"superseded_by"`
 }
 
 // successorIDs accepts the historical scalar form and the sequence form used
@@ -306,10 +364,11 @@ func ParseADR(content, filePath string) ADR {
 		enforcedBy = &v
 	}
 
-	diffContext := true
+	diffContextMode := DiffContextFunction
 	if fm != nil && fm.DiffContext != nil {
-		diffContext = *fm.DiffContext
+		diffContextMode = fm.DiffContext.Mode
 	}
+	diffContext := (diffContextMode != DiffContextNone)
 
 	var supersededBy []string
 	if fm != nil {
@@ -329,6 +388,7 @@ func ParseADR(content, filePath string) ADR {
 		PreFilter:       preFilter,
 		EnforcedBy:      enforcedBy,
 		DiffContext:     diffContext,
+		DiffContextMode: diffContextMode,
 		SupersededBy:    supersededBy,
 	}
 }

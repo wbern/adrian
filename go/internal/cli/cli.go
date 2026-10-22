@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -148,6 +149,13 @@ func Run(name string, args []string, out, errOut io.Writer) int {
 	return code
 }
 
+func sanitizeEnvVal(s string) string {
+	s = strings.ReplaceAll(s, "\x00", "")
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\n", " ")
+	return strings.TrimSpace(s)
+}
+
 func makeCommandLintFn(cmdStr string) cache.LintFn {
 	return func(a adr.ADR, diff string) (types.LintResult, error) {
 		if strings.TrimSpace(diff) == "" {
@@ -166,6 +174,53 @@ func makeCommandLintFn(cmdStr string) cache.LintFn {
 		var outBuf, errBuf bytes.Buffer
 		cmd.Stdout = &outBuf
 		cmd.Stderr = &errBuf
+
+		complexity := string(a.Complexity)
+		if complexity == "" {
+			complexity = string(adr.ComplexityStandard)
+		}
+		diffContext := string(a.DiffContextMode)
+		if diffContext == "" {
+			diffContext = string(adr.DiffContextFunction)
+		}
+
+		var baseEnv []string
+		for _, kv := range os.Environ() {
+			if !strings.HasPrefix(kv, "ADRIAN_") {
+				baseEnv = append(baseEnv, kv)
+			}
+		}
+
+		env := append(baseEnv,
+			"ADRIAN_ADR_ID="+sanitizeEnvVal(a.ID),
+			"ADRIAN_ADR_TITLE="+sanitizeEnvVal(a.Title),
+			"ADRIAN_COMPLEXITY="+complexity,
+			"ADRIAN_DIFF_CONTEXT="+diffContext,
+			"ADRIAN_MATCHED_FILES_COUNT="+strconv.Itoa(len(a.MatchedFiles)),
+		)
+
+		if len(a.MatchedFiles) > 0 {
+			tmp, err := os.CreateTemp("", "adrian-matched-files-*.txt")
+			if err == nil {
+				manifestPath := tmp.Name()
+				defer func() { _ = os.Remove(manifestPath) }()
+				for _, f := range a.MatchedFiles {
+					_, _ = tmp.WriteString(f + "\n")
+				}
+				_ = tmp.Close()
+				env = append(env, "ADRIAN_MATCHED_FILES_FILE="+manifestPath)
+			}
+			joined := strings.Join(a.MatchedFiles, ",")
+			if len(joined) <= 2048 && len(a.MatchedFiles) <= 50 {
+				env = append(env, "ADRIAN_MATCHED_FILES="+sanitizeEnvVal(joined))
+			} else {
+				env = append(env, "ADRIAN_MATCHED_FILES=")
+			}
+		} else {
+			env = append(env, "ADRIAN_MATCHED_FILES=", "ADRIAN_MATCHED_FILES_FILE=")
+		}
+
+		cmd.Env = env
 
 		err := cmd.Run()
 		if err != nil {

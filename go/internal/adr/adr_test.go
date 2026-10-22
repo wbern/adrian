@@ -118,6 +118,43 @@ func TestParseADR_DiffContextFalseFromFrontmatter(t *testing.T) {
 	if adr.DiffContext != false {
 		t.Errorf("DiffContext = %v, want false", adr.DiffContext)
 	}
+	if adr.DiffContextMode != DiffContextNone {
+		t.Errorf("DiffContextMode = %v, want %v", adr.DiffContextMode, DiffContextNone)
+	}
+}
+
+func TestParseADR_DiffContextFullString(t *testing.T) {
+	content := "---\n" +
+		"status: accepted\n" +
+		"applies_to:\n  - \"**/*.go\"\n" +
+		"complexity: lite\n" +
+		"diff_context: \"full\"\n" +
+		"---\n\n" +
+		"# 1. Test ADR\n\n## Decision\n\nCheck for violations.\n"
+	adr := ParseADR(content, "0001-test.md")
+	if adr.DiffContext != true {
+		t.Errorf("DiffContext = %v, want true", adr.DiffContext)
+	}
+	if adr.DiffContextMode != DiffContextFull {
+		t.Errorf("DiffContextMode = %v, want %v", adr.DiffContextMode, DiffContextFull)
+	}
+}
+
+func TestParseADR_DiffContextFunctionString(t *testing.T) {
+	content := "---\n" +
+		"status: accepted\n" +
+		"applies_to:\n  - \"**/*.go\"\n" +
+		"complexity: lite\n" +
+		"diff_context: \"function\"\n" +
+		"---\n\n" +
+		"# 1. Test ADR\n\n## Decision\n\nCheck for violations.\n"
+	adr := ParseADR(content, "0001-test.md")
+	if adr.DiffContext != true {
+		t.Errorf("DiffContext = %v, want true", adr.DiffContext)
+	}
+	if adr.DiffContextMode != DiffContextFunction {
+		t.Errorf("DiffContextMode = %v, want %v", adr.DiffContextMode, DiffContextFunction)
+	}
 }
 
 func TestParseADR_DiffContextDefaultsTrue(t *testing.T) {
