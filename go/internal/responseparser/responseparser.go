@@ -49,8 +49,17 @@ func ParseResponse(a adr.ADR, responseText string, tokenUsage *TokenUsage) LintR
 	cleaned := cleanJSONText(responseText)
 	var parsed structuredResponse
 	parseErr := json.Unmarshal([]byte(cleaned), &parsed)
-	if parseErr == nil && parsed.Status != "" && parsed.Explanation != "" {
-		return fromStructured(a, parsed, tokenUsage)
+	if parseErr == nil && parsed.Status != "" {
+		if parsed.Explanation == "" {
+			if parsed.Violation != "" {
+				parsed.Explanation = parsed.Violation
+			} else if parsed.Reasoning != "" {
+				parsed.Explanation = parsed.Reasoning
+			}
+		}
+		if parsed.Explanation != "" {
+			return fromStructured(a, parsed, tokenUsage)
+		}
 	}
 
 	if m := statusRe.FindStringSubmatch(responseText); m != nil {
@@ -110,35 +119,36 @@ func extractExplanation(responseText string) string {
 	if m := simpleExplanationRe.FindStringSubmatch(responseText); m != nil {
 		return m[1]
 	}
-	// Manual unescape: find "explanation": " and read until an unescaped "
-	idx := strings.Index(responseText, `"explanation"`)
-	if idx == -1 {
-		return "Unable to parse full response"
-	}
-	colon := strings.Index(responseText[idx:], ":")
-	if colon == -1 {
-		return "Unable to parse full response"
-	}
-	qstart := strings.Index(responseText[idx+colon+1:], `"`)
-	if qstart == -1 {
-		return "Unable to parse full response"
-	}
-	start := idx + colon + 1 + qstart + 1
-	var b strings.Builder
-	for i := start; i < len(responseText); i++ {
-		c := responseText[i]
-		if c == '"' && responseText[i-1] != '\\' {
-			break
+	for _, key := range []string{`"explanation"`, `"violation"`, `"reasoning"`} {
+		idx := strings.Index(responseText, key)
+		if idx == -1 {
+			continue
 		}
-		b.WriteByte(c)
+		colon := strings.Index(responseText[idx:], ":")
+		if colon == -1 {
+			continue
+		}
+		qstart := strings.Index(responseText[idx+colon+1:], `"`)
+		if qstart == -1 {
+			continue
+		}
+		start := idx + colon + 1 + qstart + 1
+		var b strings.Builder
+		for i := start; i < len(responseText); i++ {
+			c := responseText[i]
+			if c == '"' && responseText[i-1] != '\\' {
+				break
+			}
+			b.WriteByte(c)
+		}
+		content := b.String()
+		if content != "" {
+			content = strings.ReplaceAll(content, `\"`, `"`)
+			content = strings.ReplaceAll(content, `\n`, " ")
+			return content
+		}
 	}
-	content := b.String()
-	if content == "" {
-		return "Unable to parse full response"
-	}
-	content = strings.ReplaceAll(content, `\"`, `"`)
-	content = strings.ReplaceAll(content, `\n`, " ")
-	return content
+	return "Unable to parse full response"
 }
 
 func fromStructured(a adr.ADR, p structuredResponse, tu *TokenUsage) LintResult {
