@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/wbern/adrian/compare/v0.5.0...v0.6.0) (2026-10-22)
+
+
+### Features
+
+* **review:** implement diff context levels, complexity tiers, and subagent routing ([#21](https://github.com/wbern/adrian/issues/21)) ([a1ef686](https://github.com/wbern/adrian/commit/a1ef686de716d06e2db21db9eb9fd868d1e7aa19))
+
 ## [0.5.0](https://github.com/wbern/adrian/compare/v0.4.0...v0.5.0) (2026-10-22)
 
 
