@@ -112,6 +112,36 @@ func TestPrintResults_ShowsWarningsWhenPresent(t *testing.T) {
 	}
 }
 
+func TestPrintResults_JSONFormat(t *testing.T) {
+	var buf bytes.Buffer
+	results := []types.LintResult{
+		{ADR: mockADR(), Status: types.StatusPASS, Explanation: "Clean pass"},
+	}
+	PrintResults(&buf, results, types.LintOptions{Format: "json"})
+	var parsed []types.LintResult
+	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
+		t.Fatalf("JSON unmarshal error: %v (raw: %q)", err, buf.String())
+	}
+	if len(parsed) != 1 || parsed[0].Status != types.StatusPASS || parsed[0].Explanation != "Clean pass" {
+		t.Errorf("unexpected parsed JSON: %+v", parsed)
+	}
+}
+
+func TestPrintResults_MarkdownFormat(t *testing.T) {
+	var buf bytes.Buffer
+	results := []types.LintResult{
+		{ADR: mockADR(), Status: types.StatusPASS, Explanation: "Clean pass"},
+	}
+	PrintResults(&buf, results, types.LintOptions{Format: "markdown"})
+	out := buf.String()
+	if !strings.Contains(out, "# ADR Lint Report") {
+		t.Errorf("missing markdown header: %q", out)
+	}
+	if !strings.Contains(out, "| ADR | Result | Tokens Used |") {
+		t.Errorf("missing markdown table: %q", out)
+	}
+}
+
 func TestPrintResults_ShowsCachedCount(t *testing.T) {
 	var buf bytes.Buffer
 	results := []types.LintResult{

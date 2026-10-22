@@ -87,3 +87,31 @@ func TestParseResponse_TruncatedJSON_PASS_StaysAsPASS(t *testing.T) {
 		t.Errorf("status = %q, want PASS", r.Status)
 	}
 }
+
+func TestParseResponse_MarkdownCodeFences(t *testing.T) {
+	a := sampleADR()
+	response := "```json\n{\n  \"status\": \"PASS\",\n  \"confidence\": \"high\",\n  \"explanation\": \"No violations found in code blocks\"\n}\n```"
+
+	r := ParseResponse(a, response, nil)
+
+	if r.Status != "PASS" {
+		t.Errorf("status = %q, want PASS", r.Status)
+	}
+	if r.Explanation != "No violations found in code blocks" {
+		t.Errorf("explanation = %q", r.Explanation)
+	}
+}
+
+func TestParseResponse_SurroundingProse(t *testing.T) {
+	a := sampleADR()
+	response := "Here is my evaluation of the diff:\n\n{\n  \"status\": \"FAIL\",\n  \"confidence\": \"high\",\n  \"explanation\": \"Violates ADR requirement\",\n  \"suggestion\": \"Remove banned pattern\"\n}\n\nHope this helps!"
+
+	r := ParseResponse(a, response, nil)
+
+	if r.Status != "FAIL" {
+		t.Errorf("status = %q, want FAIL", r.Status)
+	}
+	if r.Explanation != "Violates ADR requirement" {
+		t.Errorf("explanation = %q", r.Explanation)
+	}
+}

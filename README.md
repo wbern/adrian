@@ -33,7 +33,12 @@ before the commit lands. Reproduce with
 [`./scripts/demo/record_demo.sh duet`](scripts/demo/record_demo.sh) — needs
 `asciinema`, `agg`, `tmux`, and the `claude` CLI on PATH.)
 
-## What it solves
+## What it solves: Why "Just Review My Code" Fails with AI
+
+Telling a general-purpose AI reviewer: *"Review this PR for issues"* produces frustrating reviews:
+- **Attention Dilution:** The model skims 500 lines across 15 files and comments on trivial style or naming while missing deep architectural commitments.
+- **Moving Targets:** Push 1 gets complaints on file A. You fix file A and push 2, and now the model complains about file B (which was untouched).
+- **Hallucinations & Fluff:** Without explicit ground truth, models invent arbitrary rules on the fly.
 
 ADRs are how teams record architectural decisions, but they drift out of
 sync with the code as soon as the ink dries — nothing checks new diffs
@@ -41,25 +46,20 @@ against the rules. `adrian` closes that loop: every commit (or PR) is
 read against the ADRs in `doc/adr/`, and violations come back with the
 file, line, and a suggested fix.
 
-## How it works
+## The Architecture: ADR Segmentation & Subagent Spawning
 
-For each `adrian check` run:
+ADRian turns your committed **Architecture Decision Records** into an executable review harness using targeted subagent segmentation:
 
-1. **Collect a diff** — staged files by default, the full branch diff vs
-   `main` with `--branch`, or specific paths with `--files`.
-2. **Match `applies_to`** — each ADR's glob list decides whether it cares
-   about any of the changed paths. Non-matching ADRs are skipped.
-3. **Apply `pre_filter`** — a substring shortcut. If none of the ADR's
-   pre-filter strings appear anywhere in the diff, the LLM call is skipped
-   entirely and the ADR is reported as skipped. This is the difference between a free
-   re-run and a paid one.
-4. **Ask Claude** — surviving ADRs are sent to the Claude Code CLI with
-   the diff. The model returns pass/fail + location + a fix.
-
-The Claude CLI is the code-checking backend — there's no API key plumbing, the
-tool shells out to `claude` and inherits whatever auth your account
-already has. Deterministic planning never invokes it and does not use these
-pre-filter shortcuts.
+1. **Deterministic Scope Matching (`applies_to`):**
+   ADRian matches changed files against your ADR corpus. If a PR touches a database query, ADR-0004 (Transaction Isolation) applies; ADR-0012 (CSS tokens) is excluded upfront with zero tokens spent.
+2. **Diff Segmentation:**
+   Instead of dumping the entire diff into one prompt, ADRian slices the diff per applicable ADR. Each agent receives *only* the files and hunks governed by that specific decision.
+3. **Subagent Spawning (Focused 1-ADR Evaluation):**
+   ADRian spawns isolated review subagents in parallel (default 5 concurrent). Each subagent evaluates exactly **one decision** against its slice of the diff.
+4. **"One Catch-All Pass" Synthesis:**
+   Subagent receipts are aggregated into a single, definitive verdict (`PASS`, `FAIL`, or `WARN` with exact `file:line` locations and concrete suggestions). Everything is evaluated upfront, eliminating multi-pass reviewer churn.
+5. **Flexible Agent Backends:**
+   Shells out to the Claude Code CLI by default, or to any custom agent runner/subagent CLI using `--agent-cmd` (e.g. `adrian check --agent-cmd "my-agent-cli"`). Outputs human terminal UI, `--json`, or `--markdown`.
 
 ## Quickstart
 
@@ -94,6 +94,28 @@ command -v adrian >/dev/null || exit 0    # no-op for collaborators without it
 adrian
 EOF
 chmod +x .git/hooks/pre-commit
+```
+
+### Review & Checking Options
+
+Run against staged changes, entire branch diffs, or piped PR diffs:
+
+```bash
+# Review current branch changes against main
+adrian review --branch main
+
+# Output GitHub-flavored Markdown (great for PR comments or CI logs)
+adrian review --branch main --markdown
+
+# Output structured JSON for automated tooling or custom review agents
+adrian review --branch main --json
+
+# Shell out to a custom subagent runner or script
+adrian review --branch main --agent-cmd "claude"
+adrian review --branch main --agent-cmd "python3 scripts/agent_evaluator.py"
+
+# Review a patch/diff piped from stdin
+git diff main...HEAD | adrian review --diff -
 ```
 
 ### Migrating from adr-lint

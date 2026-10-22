@@ -2,11 +2,16 @@
 package cli
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/wbern/adrian/go/internal/acceptcmd"
 	"github.com/wbern/adrian/go/internal/adr"
@@ -21,7 +26,9 @@ import (
 	"github.com/wbern/adrian/go/internal/listcmd"
 	"github.com/wbern/adrian/go/internal/plancmd"
 	"github.com/wbern/adrian/go/internal/planexec"
+	"github.com/wbern/adrian/go/internal/promptbuilder"
 	"github.com/wbern/adrian/go/internal/rejectcmd"
+	"github.com/wbern/adrian/go/internal/responseparser"
 	"github.com/wbern/adrian/go/internal/runner"
 	"github.com/wbern/adrian/go/internal/showcmd"
 	"github.com/wbern/adrian/go/internal/supersedecmd"
@@ -32,22 +39,22 @@ import (
 )
 
 var subcommands = map[string]dispatcher.Command{
-	"create":    {Run: createcmd.Run, Usage: "adr-lint create <title>"},
-	"show":      {Run: showcmd.Run, Usage: "adr-lint show <id>"},
-	"accept":    {Run: acceptcmd.Run, Usage: "adr-lint accept <id>"},
-	"reject":    {Run: rejectcmd.Run, Usage: "adr-lint reject <id>"},
-	"withdraw":  {Run: withdrawcmd.Run, Usage: "adr-lint withdraw <id>"},
-	"deprecate": {Run: deprecatecmd.Run, Usage: "adr-lint deprecate <id>"},
-	"supersede": {Run: supersedecmd.Run, Usage: "adr-lint supersede <old-id> <new-id>"},
-	"version":   {Run: versioncmd.Run, Usage: "adr-lint version"},
-	"list":      {Run: listcmd.Run, Usage: "adr-lint list"},
-	"validate":  {Run: validatecmd.Run, Usage: "adr-lint validate"},
+	"create":    {Run: createcmd.Run, Usage: "adrian create <title>"},
+	"show":      {Run: showcmd.Run, Usage: "adrian show <id>"},
+	"accept":    {Run: acceptcmd.Run, Usage: "adrian accept <id>"},
+	"reject":    {Run: rejectcmd.Run, Usage: "adrian reject <id>"},
+	"withdraw":  {Run: withdrawcmd.Run, Usage: "adrian withdraw <id>"},
+	"deprecate": {Run: deprecatecmd.Run, Usage: "adrian deprecate <id>"},
+	"supersede": {Run: supersedecmd.Run, Usage: "adrian supersede <old-id> <new-id>"},
+	"version":   {Run: versioncmd.Run, Usage: "adrian version"},
+	"list":      {Run: listcmd.Run, Usage: "adrian list"},
+	"validate":  {Run: validatecmd.Run, Usage: "adrian validate"},
 }
 
 // Run returns an exit code and keeps machine-readable plan output isolated
 // from the legacy linter's environment loading and provider construction.
 func Run(name string, args []string, out, errOut io.Writer) int {
-	if len(args) > 0 && args[0] == "check" {
+	if len(args) > 0 && (args[0] == "check" || args[0] == "review") {
 		args = args[1:]
 	}
 	// Plan commands resolve Git only through the sanitized immutable reader.
@@ -91,9 +98,11 @@ func Run(name string, args []string, out, errOut io.Writer) int {
 	adrDir := filepath.Join(git.GitRoot(), adr.DirName)
 	commands := map[string]dispatcher.Command{}
 	for key, command := range subcommands {
-		command.Usage = strings.ReplaceAll(command.Usage, "adr-lint", name)
+		command.Usage = strings.ReplaceAll(command.Usage, "adrian", name)
 		commands[key] = command
 	}
+	commands["check"] = dispatcher.Command{Usage: name + " check [--branch <ref>] [--files <path...>] [--diff <path>] [--format text|json|markdown]"}
+	commands["review"] = dispatcher.Command{Usage: name + " review [--branch <ref>] [--files <path...>] [--diff <path>] [--format text|json|markdown]"}
 	commands["plan"] = dispatcher.Command{Run: plancmd.Run, Usage: plancmd.Usage}
 	commands["code-plan"] = dispatcher.Command{Run: plancmd.RunCode, Usage: plancmd.CodeUsage}
 	commands["execute-plan"] = dispatcher.Command{Run: planexec.RunCommand, Usage: planexec.Usage}
@@ -122,6 +131,9 @@ func Run(name string, args []string, out, errOut io.Writer) int {
 	lintFns := map[types.Provider]cache.LintFn{
 		types.ProviderClaude: claude.Lint,
 	}
+	if opts.AgentCmd != "" {
+		lintFns[types.ProviderCustom] = makeCommandLintFn(opts.AgentCmd)
+	}
 
 	code, err := runner.Run(opts, runner.RunDeps{
 		Out:     out,
@@ -134,4 +146,53 @@ func Run(name string, args []string, out, errOut io.Writer) int {
 		return 1
 	}
 	return code
+}
+
+func makeCommandLintFn(cmdStr string) cache.LintFn {
+	return func(a adr.ADR, diff string) (types.LintResult, error) {
+		if strings.TrimSpace(diff) == "" {
+			return types.LintResult{
+				ADR:         a,
+				Status:      types.StatusSKIPPED,
+				Explanation: "No changes to lint",
+			}, nil
+		}
+		prompt := promptbuilder.BuildPrompt(a, diff)
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "/bin/sh", "-c", cmdStr)
+		cmd.Stdin = strings.NewReader(prompt)
+		var outBuf, errBuf bytes.Buffer
+		cmd.Stdout = &outBuf
+		cmd.Stderr = &errBuf
+
+		err := cmd.Run()
+		if err != nil {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return types.LintResult{
+					ADR:         a,
+					Status:      types.StatusERROR,
+					Explanation: "Agent command timeout after 120s",
+				}, nil
+			}
+			msg := strings.TrimSpace(errBuf.String())
+			if msg != "" {
+				return types.LintResult{
+					ADR:         a,
+					Status:      types.StatusERROR,
+					Explanation: fmt.Sprintf("Agent command error: %s", msg),
+				}, nil
+			}
+			return types.LintResult{
+				ADR:         a,
+				Status:      types.StatusERROR,
+				Explanation: fmt.Sprintf("Agent command error: %v", err),
+			}, nil
+		}
+
+		res := responseparser.ParseResponse(a, outBuf.String(), nil)
+		res.PromptBytes = len(prompt)
+		return res, nil
+	}
 }

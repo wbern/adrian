@@ -46,8 +46,9 @@ type structuredResponse struct {
 // ParseResponse converts responseText into a LintResult bound to adr.
 // tokenUsage may be nil.
 func ParseResponse(a adr.ADR, responseText string, tokenUsage *TokenUsage) LintResult {
+	cleaned := cleanJSONText(responseText)
 	var parsed structuredResponse
-	parseErr := json.Unmarshal([]byte(responseText), &parsed)
+	parseErr := json.Unmarshal([]byte(cleaned), &parsed)
 	if parseErr == nil && parsed.Status != "" && parsed.Explanation != "" {
 		return fromStructured(a, parsed, tokenUsage)
 	}
@@ -75,6 +76,34 @@ func ParseResponse(a adr.ADR, responseText string, tokenUsage *TokenUsage) LintR
 	}
 
 	return LintResult{ADR: a, Status: StatusERROR, Explanation: "Unable to parse response", TokenUsage: tokenUsage}
+}
+
+func cleanJSONText(s string) string {
+	trimmed := strings.TrimSpace(s)
+	// If enclosed in markdown code fences, unwrap them.
+	if strings.HasPrefix(trimmed, "```") {
+		lines := strings.Split(trimmed, "\n")
+		if len(lines) >= 2 {
+			end := len(lines) - 1
+			for i := len(lines) - 1; i > 0; i-- {
+				if strings.HasPrefix(strings.TrimSpace(lines[i]), "```") {
+					end = i
+					break
+				}
+			}
+			trimmed = strings.Join(lines[1:end], "\n")
+			trimmed = strings.TrimSpace(trimmed)
+		}
+	} else if start := strings.Index(trimmed, "{"); start != -1 {
+		if end := strings.LastIndex(trimmed, "}"); end > start {
+			candidate := trimmed[start : end+1]
+			var testMap map[string]interface{}
+			if err := json.Unmarshal([]byte(candidate), &testMap); err == nil {
+				return candidate
+			}
+		}
+	}
+	return trimmed
 }
 
 func extractExplanation(responseText string) string {
