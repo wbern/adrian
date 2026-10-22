@@ -23,3 +23,24 @@ func TestCanonicalAndCompatibilityCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestCodePlanCommandIsModelFreeAndRequiresProducerIdentity(t *testing.T) {
+	for _, name := range []string{"adrian", "adr-lint"} {
+		var out, stderr bytes.Buffer
+		if code := Run(name, []string{"code-plan", "--help"}, &out, &stderr); code != 0 || !strings.Contains(out.String(), "--repository") {
+			t.Fatalf("missing code-plan: %d %s %s", code, out.String(), stderr.String())
+		}
+		out.Reset()
+		stderr.Reset()
+		if code := Run(name, []string{"code-plan", "--base", "HEAD"}, &out, &stderr); code == 0 || out.Len() != 0 || !strings.Contains(stderr.String(), "repository") {
+			t.Fatalf("unsafe code-plan: %d %s %s", code, out.String(), stderr.String())
+		}
+	}
+}
+
+func TestExecutePlanPublicCommandRequiresImmutableAttempt(t *testing.T) {
+	var out, stderr bytes.Buffer
+	if code := Run("adrian", []string{"execute-plan", "--help"}, &out, &stderr); code != 0 || !strings.Contains(out.String(), "--record") {
+		t.Fatalf("missing durable executor: %d %s %s", code, out.String(), stderr.String())
+	}
+}

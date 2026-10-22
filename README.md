@@ -190,6 +190,11 @@ existing review requirements until the relevant policy coverage is verified.
 The plan fingerprint includes provenance commits; it is not a selective cache
 key for reusing reviews across unrelated policy changes.
 
+For complete code-review source inventories, including unannotated applicable
+rules and baseline paths, see [code-review coverage](doc/code-review-coverage.md).
+The separate `code-plan` and opaque `execute-plan` commands do not publish
+review decisions or change the existing `plan` capability contract.
+
 ## Picking your first ADRs
 
 The single test that decides whether a decision belongs in an

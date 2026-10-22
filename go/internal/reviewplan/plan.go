@@ -81,14 +81,11 @@ func Build(provenance Provenance, changes []Change, policies []reviewpolicy.ADR,
 			continue
 		}
 		for i, scope := range policy.Scopes {
-			matched := map[string]bool{}
-			for file := range paths {
-				if scope.Matches(file) {
-					matched[file] = true
-					covered[file] = true
-					if scope.ReviewDeclared {
-						classified[file] = true
-					}
+			matched := matchedPaths(scope, paths)
+			for file := range matched {
+				covered[file] = true
+				if scope.ReviewDeclared {
+					classified[file] = true
 				}
 			}
 			if len(matched) == 0 {
