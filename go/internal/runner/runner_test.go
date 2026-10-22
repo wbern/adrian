@@ -892,3 +892,27 @@ func TestRun_CIWritesArtifacts(t *testing.T) {
 		}
 	}
 }
+
+func TestFilterFilesForDiffChunk(t *testing.T) {
+	files := map[string]adr.FileRecord{
+		"a.go": {Path: "a.go", Content: "package a"},
+		"b.go": {Path: "b.go", Content: "package b"},
+		"c.go": {Path: "c.go", Content: "package c"},
+	}
+	chunk := `diff --git a/b.go b/b.go
+--- a/b.go
++++ b/b.go
+@@ -1 +1 @@
++x
+`
+	filtered := filterFilesForDiffChunk(files, chunk)
+	if len(filtered) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(filtered))
+	}
+	if _, ok := filtered["b.go"]; !ok {
+		t.Errorf("expected b.go in filtered files")
+	}
+	if _, ok := filtered["a.go"]; ok {
+		t.Errorf("a.go should have been filtered out")
+	}
+}

@@ -34,6 +34,12 @@ import (
 // (ADR, files) lint goroutines.
 const DefaultMaxParallel = 5
 
+// MaxWholeFileContextBudget is the maximum total byte budget for full-file context across all files for an ADR.
+const MaxWholeFileContextBudget = 512 * 1024 // 512 KB
+
+// MaxWholeFileCount is the maximum number of matched files whose full contents are loaded.
+const MaxWholeFileCount = 10
+
 // RunDeps carries the dependencies Run needs. Real runtime wiring lives
 // in cmd/adr-lint/main.go; tests inject fakes.
 type RunDeps struct {
@@ -222,6 +228,20 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 		cacheDir = cache.GetCacheDir()
 	}
 
+	getFileContent := func(path string) adr.FileRecord {
+		if deps.Git == nil {
+			return adr.FileRecord{Path: path}
+		}
+		fcr := deps.Git.GetFileContent(path, targetRef, !opts.BranchSet && len(opts.Files) == 0 && !opts.DiffSet)
+		return adr.FileRecord{
+			Path:      fcr.Path,
+			Content:   fcr.Content,
+			IsBinary:  fcr.IsBinary,
+			IsDeleted: fcr.IsDeleted,
+			Truncated: fcr.Truncated,
+		}
+	}
+
 	results := make([]types.LintResult, 0, len(pairs))
 	for batchStart := 0; batchStart < len(pairs); batchStart += maxParallel {
 		end := batchStart + maxParallel
@@ -235,7 +255,7 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 			wg.Add(1)
 			go func(i int, p adrFiles) {
 				defer wg.Done()
-				batchResults[i] = runOnePair(p.adr, p.files, opts, getDiff, lintFn, cacheDir, log)
+				batchResults[i] = runOnePair(p.adr, p.files, opts, getDiff, getFileContent, lintFn, cacheDir, log)
 			}(i, p)
 		}
 		wg.Wait()
@@ -367,10 +387,13 @@ func runOnePair(
 	files []string,
 	opts types.LintOptions,
 	getDiff func([]string, bool) string,
+	getFileContent func(string) adr.FileRecord,
 	lintFn cache.LintFn,
 	cacheDir string,
 	log *logger.Logger,
 ) types.LintResult {
+	a.MatchedFiles = files
+
 	if opts.DryRun {
 		return types.LintResult{
 			ADR:          a,
@@ -388,6 +411,33 @@ func runOnePair(
 		if pre := formatter.CheckPreFilter(a, diff); pre != nil {
 			pre.CheckedFiles = files
 			return *pre
+		}
+	}
+
+	// Load full file snapshots only when actually proceeding to lint, respecting budget ceilings
+	if a.DiffContextMode == adr.DiffContextFull && getFileContent != nil {
+		if a.FullFiles == nil {
+			a.FullFiles = make(map[string]adr.FileRecord, len(files))
+		}
+		totalBytes := 0
+		for i, f := range files {
+			if i >= MaxWholeFileCount {
+				a.FullFiles[f] = adr.FileRecord{
+					Path:    f,
+					Content: fmt.Sprintf("[Omitted: whole-file context budget exceeded maximum file count (%d)]", MaxWholeFileCount),
+				}
+				continue
+			}
+			if totalBytes >= MaxWholeFileContextBudget {
+				a.FullFiles[f] = adr.FileRecord{
+					Path:    f,
+					Content: fmt.Sprintf("[Omitted: whole-file context budget exceeded total byte ceiling (%d KB)]", MaxWholeFileContextBudget/1024),
+				}
+				continue
+			}
+			rec := getFileContent(f)
+			totalBytes += len(rec.Content)
+			a.FullFiles[f] = rec
 		}
 	}
 
@@ -440,7 +490,11 @@ func runOnePair(
 		wg.Add(1)
 		go func(i int, chunk string) {
 			defer wg.Done()
-			r, _ := cache.LintWithCache(a, chunk, cfg.Model, cache.Provider(opts.Provider), lintFn, cacheDir, cacheOpts)
+			chunkADR := a
+			if a.DiffContextMode == adr.DiffContextFull && len(a.FullFiles) > 0 {
+				chunkADR.FullFiles = filterFilesForDiffChunk(a.FullFiles, chunk)
+			}
+			r, _ := cache.LintWithCache(chunkADR, chunk, cfg.Model, cache.Provider(opts.Provider), lintFn, cacheDir, cacheOpts)
 			chunkResults[i] = r
 		}(i, chunk)
 	}
@@ -450,6 +504,20 @@ func runOnePair(
 	aggregated.CheckedFiles = files
 	aggregated.FileStats = convertFileStats(diffstats.ParseDiffStats(diff))
 	return aggregated
+}
+
+func filterFilesForDiffChunk(fullFiles map[string]adr.FileRecord, chunk string) map[string]adr.FileRecord {
+	if len(fullFiles) == 0 {
+		return nil
+	}
+	stats := diffstats.ParseDiffStats(chunk)
+	out := make(map[string]adr.FileRecord, len(stats))
+	for _, s := range stats {
+		if rec, ok := fullFiles[s.Path]; ok {
+			out[s.Path] = rec
+		}
+	}
+	return out
 }
 
 func convertFileStats(stats []diffstats.FileStats) []types.FileStats {

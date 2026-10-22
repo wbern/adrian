@@ -54,23 +54,70 @@ func TestBuildCacheKey_DifferentInputsProduceDifferentKeys(t *testing.T) {
 	differentID := sampleADR()
 	differentID.ID = "0003"
 
+	differentTitle := sampleADR()
+	differentTitle.Title = "Use Testify Suite"
+
+	differentComplexity := sampleADR()
+	differentComplexity.Complexity = adr.ComplexityComplex
+
 	differentDecision := sampleADR()
 	differentDecision.Decision = "Updated check for gomock usage"
+
+	differentMode := sampleADR()
+	differentMode.DiffContextMode = adr.DiffContextFull
+
+	withFiles1 := sampleADR()
+	withFiles1.DiffContextMode = adr.DiffContextFull
+	withFiles1.FullFiles = map[string]adr.FileRecord{
+		"pkg/a.go": {Content: "package a\nfunc Foo() {}\n"},
+	}
+
+	withFiles2 := sampleADR()
+	withFiles2.DiffContextMode = adr.DiffContextFull
+	withFiles2.FullFiles = map[string]adr.FileRecord{
+		"pkg/a.go": {Content: "package a\nfunc Bar() {}\n"},
+	}
 
 	cases := []struct {
 		name string
 		key  string
 	}{
 		{"id differs", BuildCacheKey(differentID, baseDiff, baseModel, baseProvider)},
+		{"title differs", BuildCacheKey(differentTitle, baseDiff, baseModel, baseProvider)},
+		{"complexity differs", BuildCacheKey(differentComplexity, baseDiff, baseModel, baseProvider)},
 		{"decision differs", BuildCacheKey(differentDecision, baseDiff, baseModel, baseProvider)},
 		{"diff differs", BuildCacheKey(base, `+ import "github.com/golang/mock/gomock";`, baseModel, baseProvider)},
 		{"provider differs", BuildCacheKey(base, baseDiff, baseModel, "other-provider")},
 		{"model differs", BuildCacheKey(base, baseDiff, "claude-opus-4-6", baseProvider)},
+		{"diffContextMode differs", BuildCacheKey(differentMode, baseDiff, baseModel, baseProvider)},
+		{"fullFiles content differs", BuildCacheKey(withFiles1, baseDiff, baseModel, baseProvider)},
 	}
 	for _, c := range cases {
 		if c.key == baseKey {
 			t.Errorf("%s: expected a different key than the base", c.name)
 		}
+	}
+
+	// Verify that withFiles1 and withFiles2 have different keys from each other
+	k1 := BuildCacheKey(withFiles1, baseDiff, baseModel, baseProvider)
+	k2 := BuildCacheKey(withFiles2, baseDiff, baseModel, baseProvider)
+	if k1 == k2 {
+		t.Errorf("expected different keys for different full file contents, got identical %q", k1)
+	}
+
+	// Verify deterministic hashing regardless of map iteration order
+	orderA := sampleADR()
+	orderA.FullFiles = map[string]adr.FileRecord{
+		"b.go": {Content: "bbb"},
+		"a.go": {Content: "aaa"},
+	}
+	orderB := sampleADR()
+	orderB.FullFiles = map[string]adr.FileRecord{
+		"a.go": {Content: "aaa"},
+		"b.go": {Content: "bbb"},
+	}
+	if BuildCacheKey(orderA, baseDiff, baseModel, baseProvider) != BuildCacheKey(orderB, baseDiff, baseModel, baseProvider) {
+		t.Errorf("expected map order to not affect cache key")
 	}
 }
 
