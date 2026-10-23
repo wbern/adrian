@@ -216,6 +216,38 @@ func TestParseADR_YAMLFrontmatter(t *testing.T) {
 	}
 }
 
+func TestParseADR_TagsAndCanonicalID(t *testing.T) {
+	// Sequence tags
+	content := "---\nstatus: accepted\ntags:\n  - ux\n  - security\n---\n\n# 37. Brand contract\n\n## Decision\n\nCheck colors.\n"
+	adr := ParseADR(content, "0037-brand.md")
+	if !reflect.DeepEqual(adr.Tags, []string{"ux", "security"}) {
+		t.Errorf("Tags = %v, want [ux security]", adr.Tags)
+	}
+	if adr.CanonicalID() != "0037" {
+		t.Errorf("CanonicalID = %q, want 0037", adr.CanonicalID())
+	}
+
+	// Flow sequence tags
+	content2 := "---\nstatus: accepted\ntags: [code-review, perf]\n---\n\n# 7. Performance\n\n## Decision\n\nCheck speed.\n"
+	adr2 := ParseADR(content2, "0007-perf.md")
+	if !reflect.DeepEqual(adr2.Tags, []string{"code-review", "perf"}) {
+		t.Errorf("Tags = %v, want [code-review perf]", adr2.Tags)
+	}
+	if adr2.CanonicalID() != "0007" {
+		t.Errorf("CanonicalID = %q, want 0007", adr2.CanonicalID())
+	}
+
+	// Single scalar tag
+	content3 := "---\nstatus: accepted\ntags: backend\n---\n\n# 108. Timezone\n\n## Decision\n\nCheck TZ.\n"
+	adr3 := ParseADR(content3, "0108-tz.md")
+	if !reflect.DeepEqual(adr3.Tags, []string{"backend"}) {
+		t.Errorf("Tags = %v, want [backend]", adr3.Tags)
+	}
+	if adr3.CanonicalID() != "0108" {
+		t.Errorf("CanonicalID = %q, want 0108", adr3.CanonicalID())
+	}
+}
+
 func TestParseADR_FrontmatterComplexityComplex(t *testing.T) {
 	content := "---\nstatus: accepted\ncomplexity: complex\n---\n\n" +
 		"# 5. Architecture Review\n\n## Decision\n\nDeep analysis needed.\n"
