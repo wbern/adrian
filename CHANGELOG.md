@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/wbern/adrian/compare/v0.7.0...v0.8.0) (2026-10-23)
+
+
+### Features
+
+* **resolve:** implement first-class adrian resolve rulebook command ([#25](https://github.com/wbern/adrian/issues/25)) ([f544e70](https://github.com/wbern/adrian/commit/f544e7015cddc91401d2611b1ebe2ca4ac4de560))
+
 ## [0.7.0](https://github.com/wbern/adrian/compare/v0.6.1...v0.7.0) (2026-10-22)
 
 
