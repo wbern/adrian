@@ -117,6 +117,7 @@ type ADR struct {
 	MatchedFiles    []string
 	FullFiles       map[string]FileRecord
 	SupersededBy    []string
+	Tags            []string
 }
 
 // frontmatter is the raw shape of the YAML block; field types accept the
@@ -130,6 +131,32 @@ type frontmatter struct {
 	EnforcedBy   string              `yaml:"enforced_by"`
 	DiffContext  *DiffContextSetting `yaml:"diff_context"`
 	SupersededBy successorIDs        `yaml:"superseded_by"`
+	Tags         tagsList            `yaml:"tags"`
+}
+
+// tagsList accepts a scalar string or a YAML sequence of strings.
+type tagsList []string
+
+func (t *tagsList) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		if val := strings.TrimSpace(n.Value); val != "" {
+			*t = []string{val}
+		}
+		return nil
+	}
+	if n.Kind == yaml.SequenceNode {
+		var res []string
+		for _, item := range n.Content {
+			if item.Kind == yaml.ScalarNode {
+				if val := strings.TrimSpace(item.Value); val != "" {
+					res = append(res, val)
+				}
+			}
+		}
+		*t = res
+		return nil
+	}
+	return nil
 }
 
 // successorIDs accepts the historical scalar form and the sequence form used
@@ -374,8 +401,10 @@ func ParseADR(content, filePath string) ADR {
 	diffContext := (diffContextMode != DiffContextNone)
 
 	var supersededBy []string
+	var tags []string
 	if fm != nil {
 		supersededBy = append(supersededBy, fm.SupersededBy...)
+		tags = append(tags, fm.Tags...)
 	}
 
 	return ADR{
@@ -393,7 +422,14 @@ func ParseADR(content, filePath string) ADR {
 		DiffContext:     diffContext,
 		DiffContextMode: diffContextMode,
 		SupersededBy:    supersededBy,
+		Tags:            tags,
 	}
+}
+
+// CanonicalID returns the 4-digit zero-padded ID if numeric (e.g. "0037"),
+// or the raw ID if non-numeric.
+func (a ADR) CanonicalID() string {
+	return NormalizeID(a.ID)
 }
 
 func parseTitle(body, filePath string) (id, title string) {
