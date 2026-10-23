@@ -254,78 +254,76 @@ func Run(args []string, out, errOut io.Writer) error {
 		sb.WriteString("\n")
 	}
 
-	costMarker := fmt.Sprintf(
+	fmt.Fprintf(&sb,
 		"<!-- pr-review-cost:v%s head=%s diff=%s adr_scope=%s adr_bytes=na tokens_total=na tokens_in=na tokens_out=na payload_bytes=na reviewed_bytes=%d diff_bytes=%d passes=%d schema=%s -->\n",
 		SummarySchemaVersion, plan.Head, plan.DiffID, finAdrScope, finBytesDone, finBytesTotal, finSegDone, SummarySchemaVersion,
 	)
-	sb.WriteString(costMarker)
 
 	// Coverage ledger
-	sb.WriteString(fmt.Sprintf(
+	fmt.Fprintf(&sb,
 		"\n<details>\n<summary>Coverage ledger</summary>\n\ncoverage ledger: %d/%d segments; %d/%d bytes.\n\n</details>\n",
 		finSegDone, finSegTotal, finBytesDone, finBytesTotal,
-	))
+	)
 
 	// Review scope (if present)
 	if plan.ReviewScope != "" {
-		sb.WriteString(fmt.Sprintf("\n> **Review scope:** %s.\n", plan.ReviewScope))
+		fmt.Fprintf(&sb, "\n> **Review scope:** %s.\n", plan.ReviewScope)
 	}
 
 	// Coverage Identity Check
 	if finPlanned != finClaimed || finPlanError != "" || !finPacketComplete {
 		finVerdict = "request_changes"
 		sb.WriteString("\nverdict: request_changes (ESCALATED)\n")
-		sb.WriteString(fmt.Sprintf("blocker | Test Evidence Quality | (whole diff) | source: ci-gate | evidence: review coverage identity failed. Planned segments [%s]; the reviewer accounted for [%s]; %d of %d bytes were judged.", finPlanned, finClaimed, finBytesDone, finBytesTotal))
+		fmt.Fprintf(&sb, "blocker | Test Evidence Quality | (whole diff) | source: ci-gate | evidence: review coverage identity failed. Planned segments [%s]; the reviewer accounted for [%s]; %d of %d bytes were judged.", finPlanned, finClaimed, finBytesDone, finBytesTotal)
 		if finMissingPaths != "" {
-			sb.WriteString(fmt.Sprintf(" Never judged: %s.", finMissingPaths))
+			fmt.Fprintf(&sb, " Never judged: %s.", finMissingPaths)
 		}
 		if finPlanError != "" {
-			sb.WriteString(fmt.Sprintf(" Planner refusal: %s.", finPlanError))
+			fmt.Fprintf(&sb, " Planner refusal: %s.", finPlanError)
 		}
 		if !finPacketComplete {
 			missingFrag := finPacketMissing
 			if missingFrag == "" {
 				missingFrag = "unknown"
 			}
-			sb.WriteString(fmt.Sprintf(" The evidence packet is incomplete; required fragments missing or truncated: %s.", missingFrag))
+			fmt.Fprintf(&sb, " The evidence packet is incomplete; required fragments missing or truncated: %s.", missingFrag)
 		}
 		sb.WriteString(" | expected fix: re-review every unaccounted segment, repair the plan, or obtain complete required evidence before an approval can mean anything.\n")
-		sb.WriteString(fmt.Sprintf("\n> ⚠️ **Approve refused on incomplete coverage (gci-u0huj).** A verdict is a statement about the code that was READ. This one was formed over %d of %d bytes, and the reviewer does not get to certify its own coverage — that is why this check compares its claim against the plan rather than trusting either alone.\n", finBytesDone, finBytesTotal))
+		fmt.Fprintf(&sb, "\n> ⚠️ **Approve refused on incomplete coverage (gci-u0huj).** A verdict is a statement about the code that was READ. This one was formed over %d of %d bytes, and the reviewer does not get to certify its own coverage — that is why this check compares its claim against the plan rather than trusting either alone.\n", finBytesDone, finBytesTotal)
 	}
 
 	// Corpus provenance
 	if plan.Corpus != nil && plan.Corpus.State != "" {
-		corpusMarker := fmt.Sprintf(
+		fmt.Fprintf(&sb,
 			"<!-- pr-review-corpus:v%s head=%s state=%s behind=%d ahead=%d dirty_adrs=%d schema=%s -->\n",
 			SummarySchemaVersion, plan.Head, plan.Corpus.State, plan.Corpus.Behind, plan.Corpus.Ahead, plan.Corpus.DirtyADRs, SummarySchemaVersion,
 		)
-		sb.WriteString(corpusMarker)
 
 		switch plan.Corpus.State {
 		case "behind", "ahead", "diverged", "dirty", "unknown":
 			if finVerdict == "approve" {
 				finVerdict = "request_changes"
 				sb.WriteString("\nverdict: request_changes (ESCALATED)\n")
-				sb.WriteString(fmt.Sprintf("blocker | Architectural Consistency | (whole diff) | source: ADR-0004 (crm: review gates are pipeline steps, not prose) §Decision | evidence: the ADR corpus this review enforced was read from %s, which is %s", "corpus", plan.Corpus.State))
+				fmt.Fprintf(&sb, "blocker | Architectural Consistency | (whole diff) | source: ADR-0004 (crm: review gates are pipeline steps, not prose) §Decision | evidence: the ADR corpus this review enforced was read from %s, which is %s", "corpus", plan.Corpus.State)
 				if plan.Corpus.Behind > 0 {
-					sb.WriteString(fmt.Sprintf(" by %d commit(s)", plan.Corpus.Behind))
+					fmt.Fprintf(&sb, " by %d commit(s)", plan.Corpus.Behind)
 				}
 				if plan.Corpus.Ahead > 0 {
-					sb.WriteString(fmt.Sprintf(" with %d local commit(s) the target does not carry", plan.Corpus.Ahead))
+					fmt.Fprintf(&sb, " with %d local commit(s) the target does not carry", plan.Corpus.Ahead)
 				}
 				if plan.Corpus.DirtyADRs > 0 {
-					sb.WriteString(fmt.Sprintf(" with %d locally-modified ADR file(s)", plan.Corpus.DirtyADRs))
+					fmt.Fprintf(&sb, " with %d locally-modified ADR file(s)", plan.Corpus.DirtyADRs)
 				}
 				sb.WriteString(". An approve asserts that no binding rule was violated; it cannot assert that about rules that exist on no branch. | expected fix: bring the canonical checkout to merged source (and resolve local ADR modifications), then re-review.\n")
-				sb.WriteString(fmt.Sprintf("\n> ⚠️ **Approve refused: the ADR corpus does not match merged source (gci-6nst0).** State: `%s`", plan.Corpus.State))
+				fmt.Fprintf(&sb, "\n> ⚠️ **Approve refused: the ADR corpus does not match merged source (gci-6nst0).** State: `%s`", plan.Corpus.State)
 				if plan.Corpus.Behind > 0 {
-					sb.WriteString(fmt.Sprintf(", behind by %d commit(s)", plan.Corpus.Behind))
+					fmt.Fprintf(&sb, ", behind by %d commit(s)", plan.Corpus.Behind)
 				}
 				if plan.Corpus.Ahead > 0 {
-					sb.WriteString(fmt.Sprintf(", ahead by %d commit(s)", plan.Corpus.Ahead))
+					fmt.Fprintf(&sb, ", ahead by %d commit(s)", plan.Corpus.Ahead)
 				}
 				if plan.Corpus.DirtyADRs > 0 {
-					sb.WriteString(fmt.Sprintf(", %d ADR file(s) locally modified", plan.Corpus.DirtyADRs))
+					fmt.Fprintf(&sb, ", %d ADR file(s) locally modified", plan.Corpus.DirtyADRs)
 				}
 				sb.WriteString(".\n> A blocking verdict is left to stand — a wrong block is visible and arguable. A wrong approve is silent, so this gate will not carry one.\n")
 				sb.WriteString("> Original model verdict was `approve`; its rationale is retained above.\n")
