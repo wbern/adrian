@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/wbern/adrian/compare/v0.8.0...v0.9.0) (2026-10-23)
+
+
+### Features
+
+* **finalize:** add native adrian finalize review audit subcommand ([#27](https://github.com/wbern/adrian/issues/27)) ([4df1949](https://github.com/wbern/adrian/commit/4df1949b07955e590524bf942a63e98d18c325eb))
+
 ## [0.8.0](https://github.com/wbern/adrian/compare/v0.7.0...v0.8.0) (2026-10-23)
 
 
