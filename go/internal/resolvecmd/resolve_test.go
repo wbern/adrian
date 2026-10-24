@@ -352,3 +352,22 @@ func TestRankRules_BurstAndOrdering(t *testing.T) {
 		t.Errorf("Untriggered = %v, want [0003]", res.Untriggered)
 	}
 }
+
+func TestRawFindingRow_PRString(t *testing.T) {
+	cases := []struct {
+		input RawFindingRow
+		want  string
+	}{
+		{RawFindingRow{PR: "2357"}, "2357"},
+		{RawFindingRow{PR: float64(2357)}, "2357"},
+		{RawFindingRow{PR: int(2357)}, "2357"},
+		{RawFindingRow{PR: int64(2357)}, "2357"},
+		{RawFindingRow{PR: json.Number("2357")}, "2357"},
+	}
+	for _, tc := range cases {
+		got := tc.input.PRString()
+		if got != tc.want {
+			t.Errorf("PRString(%v) = %q, want %q", tc.input.PR, got, tc.want)
+		}
+	}
+}
