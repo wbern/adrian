@@ -187,7 +187,11 @@ func Run(args []string, adrDir string, out io.Writer, errOut io.Writer) error {
 				lenses = parsedLenses
 				for _, l := range lenses {
 					lensTitles[l.ID] = l.Title
-					refs[l.ID] = fmt.Sprintf("%s/docs/code-review.md#%s", repoURL, l.Anchor)
+					if repoURL != "" {
+						refs[l.ID] = fmt.Sprintf("%s/docs/code-review.md#%s", repoURL, l.Anchor)
+					} else {
+						refs[l.ID] = fmt.Sprintf("docs/code-review.md#%s", l.Anchor)
+					}
 				}
 			}
 		}
@@ -196,7 +200,11 @@ func Run(args []string, adrDir string, out io.Writer, errOut io.Writer) error {
 		for _, a := range allADRs {
 			canonical := "ADR-" + a.CanonicalID()
 			slug := filepath.Base(a.FilePath)
-			refs[canonical] = fmt.Sprintf("%s/doc/adr/%s", repoURL, slug)
+			if repoURL != "" {
+				refs[canonical] = fmt.Sprintf("%s/doc/adr/%s", repoURL, slug)
+			} else {
+				refs[canonical] = fmt.Sprintf("doc/adr/%s", slug)
+			}
 		}
 
 		// Load finding weights
@@ -421,11 +429,11 @@ func printRankedText(out io.Writer, record FrontloadRecord, allRanked []RankedRu
 func detectRepoURL(runner GitRunner) string {
 	out, err := runner.RunGit("config", "--get", "remote.origin.url")
 	if err != nil {
-		return "https://github.com/wbern/crm/blob/main"
+		return ""
 	}
 	raw := strings.TrimSpace(string(out))
 	if raw == "" {
-		return "https://github.com/wbern/crm/blob/main"
+		return ""
 	}
 	raw = strings.TrimSuffix(raw, ".git")
 	if strings.HasPrefix(raw, "git@github.com:") {
@@ -435,5 +443,12 @@ func detectRepoURL(runner GitRunner) string {
 	if strings.HasPrefix(raw, "https://github.com/") {
 		return fmt.Sprintf("%s/blob/main", raw)
 	}
-	return "https://github.com/wbern/crm/blob/main"
+	if strings.HasPrefix(raw, "git@gitlab.com:") {
+		slug := strings.TrimPrefix(raw, "git@gitlab.com:")
+		return fmt.Sprintf("https://gitlab.com/%s/-/blob/main", slug)
+	}
+	if strings.HasPrefix(raw, "https://gitlab.com/") {
+		return fmt.Sprintf("%s/-/blob/main", raw)
+	}
+	return ""
 }

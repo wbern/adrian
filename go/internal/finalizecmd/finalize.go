@@ -289,7 +289,7 @@ func Run(args []string, out, errOut io.Writer) error {
 			fmt.Fprintf(&sb, " The evidence packet is incomplete; required fragments missing or truncated: %s.", missingFrag)
 		}
 		sb.WriteString(" | expected fix: re-review every unaccounted segment, repair the plan, or obtain complete required evidence before an approval can mean anything.\n")
-		fmt.Fprintf(&sb, "\n> ⚠️ **Approve refused on incomplete coverage (gci-u0huj).** A verdict is a statement about the code that was READ. This one was formed over %d of %d bytes, and the reviewer does not get to certify its own coverage — that is why this check compares its claim against the plan rather than trusting either alone.\n", finBytesDone, finBytesTotal)
+		fmt.Fprintf(&sb, "\n> ⚠️ **Approve refused on incomplete coverage.** A verdict is a statement about the code that was READ. This one was formed over %d of %d bytes, and the reviewer does not get to certify its own coverage — that is why this check compares its claim against the plan rather than trusting either alone.\n", finBytesDone, finBytesTotal)
 	}
 
 	// Corpus provenance
@@ -304,7 +304,7 @@ func Run(args []string, out, errOut io.Writer) error {
 			if finVerdict == "approve" {
 				finVerdict = "request_changes"
 				sb.WriteString("\nverdict: request_changes (ESCALATED)\n")
-				fmt.Fprintf(&sb, "blocker | Architectural Consistency | (whole diff) | source: ADR-0004 (crm: review gates are pipeline steps, not prose) §Decision | evidence: the ADR corpus this review enforced was read from %s, which is %s", "corpus", plan.Corpus.State)
+				fmt.Fprintf(&sb, "blocker | Architectural Consistency | (whole diff) | source: review-contract (review gates are pipeline steps, not prose) §Decision | evidence: the ADR corpus this review enforced was read from %s, which is %s", "corpus", plan.Corpus.State)
 				if plan.Corpus.Behind > 0 {
 					fmt.Fprintf(&sb, " by %d commit(s)", plan.Corpus.Behind)
 				}
@@ -315,7 +315,7 @@ func Run(args []string, out, errOut io.Writer) error {
 					fmt.Fprintf(&sb, " with %d locally-modified ADR file(s)", plan.Corpus.DirtyADRs)
 				}
 				sb.WriteString(". An approve asserts that no binding rule was violated; it cannot assert that about rules that exist on no branch. | expected fix: bring the canonical checkout to merged source (and resolve local ADR modifications), then re-review.\n")
-				fmt.Fprintf(&sb, "\n> ⚠️ **Approve refused: the ADR corpus does not match merged source (gci-6nst0).** State: `%s`", plan.Corpus.State)
+				fmt.Fprintf(&sb, "\n> ⚠️ **Approve refused: the ADR corpus does not match merged source.** State: `%s`", plan.Corpus.State)
 				if plan.Corpus.Behind > 0 {
 					fmt.Fprintf(&sb, ", behind by %d commit(s)", plan.Corpus.Behind)
 				}
