@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/wbern/adrian/compare/v0.10.1...v0.11.0) (2026-10-24)
+
+
+### Features
+
+* **standalone:** decouple from internal Gas City and CRM specifics (Phase 1) ([624e22c](https://github.com/wbern/adrian/commit/624e22c165758d73577d27ef22d22b88d72f1eec))
+
 ## [0.10.1](https://github.com/wbern/adrian/compare/v0.10.0...v0.10.1) (2026-10-24)
 
 
