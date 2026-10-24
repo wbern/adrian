@@ -15,16 +15,27 @@ import (
 
 const (
 	DefaultWindowDays   = 60
-	DefaultCacheFile    = "node_modules/.cache/review-finding-weights.json"
+	DefaultCacheFile    = ".adrian/cache/weights.json"
+	LegacyCacheFile     = "node_modules/.cache/review-finding-weights.json"
 	ThinCorpusThreshold = 100
 	StaleWarnDays       = 14
 )
 
-// LoadWeights tries to load weights from the cache file first, or queries Dolt/Beads if needed.
+// LoadWeights tries to load weights from the cache file first, repo static file, or queries store if needed.
 func LoadWeights(repoRoot string) (*FindingWeightsData, error) {
 	cachePath := os.Getenv("REVIEW_WEIGHTS_CACHE")
 	if cachePath == "" {
-		cachePath = filepath.Join(repoRoot, DefaultCacheFile)
+		candidate := filepath.Join(repoRoot, DefaultCacheFile)
+		if _, err := os.Stat(candidate); err == nil {
+			cachePath = candidate
+		} else {
+			legacyCandidate := filepath.Join(repoRoot, LegacyCacheFile)
+			if _, lErr := os.Stat(legacyCandidate); lErr == nil {
+				cachePath = legacyCandidate
+			} else {
+				cachePath = candidate
+			}
+		}
 	}
 
 	offline := os.Getenv("REVIEW_WEIGHTS_OFFLINE") == "1"
@@ -39,11 +50,26 @@ func LoadWeights(repoRoot string) (*FindingWeightsData, error) {
 		}
 	}
 
+	// Try reading repo-level static weights file if present (.adrian/weights.json or doc/adr/weights.json)
+	for _, staticPath := range []string{
+		filepath.Join(repoRoot, ".adrian/weights.json"),
+		filepath.Join(repoRoot, "doc/adr/weights.json"),
+		filepath.Join(repoRoot, "docs/adr/weights.json"),
+	} {
+		if sData, sErr := os.ReadFile(staticPath); sErr == nil {
+			var weights FindingWeightsData
+			if jsonErr := json.Unmarshal(sData, &weights); jsonErr == nil && len(weights.Buckets) > 0 {
+				weights.Window.Origin = "file"
+				return &weights, nil
+			}
+		}
+	}
+
 	if offline {
 		return nil, fmt.Errorf("offline mode and cache unavailable at %s", cachePath)
 	}
 
-	// Try querying gc bd sql if available
+	// Try querying store if available
 	weights, err := QueryStore(repoRoot, DefaultWindowDays)
 	if err == nil && weights != nil {
 		// Attempt saving to cache
@@ -85,7 +111,7 @@ func CanonicalRuleID(rawID string) string {
 // QueryStore queries review.finding event beads via gc bd sql.
 func QueryStore(repoRoot string, windowDays int) (*FindingWeightsData, error) {
 	if _, err := exec.LookPath("gc"); err != nil {
-		return nil, fmt.Errorf("gc CLI not found")
+		return nil, fmt.Errorf("finding weights not configured (no local cache or finding store)")
 	}
 
 	since := time.Now().UTC().AddDate(0, 0, -windowDays).Format("2006-01-02")
@@ -114,12 +140,11 @@ func QueryStore(repoRoot string, windowDays int) (*FindingWeightsData, error) {
 		}
 	}
 
-	var args []string
-	if rig != "" {
-		args = []string{"bd", "sql", "--rig", rig, "--json", sql}
-	} else {
-		args = []string{"bd", "sql", "--json", sql}
+	if rig == "" {
+		return nil, fmt.Errorf("finding weights not configured (no local cache or finding store)")
 	}
+
+	args := []string{"bd", "sql", "--rig", rig, "--json", sql}
 
 	cmd := exec.CommandContext(ctx, "gc", args...)
 	cmd.Dir = repoRoot
