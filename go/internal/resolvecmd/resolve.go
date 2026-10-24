@@ -437,4 +437,3 @@ func detectRepoURL(runner GitRunner) string {
 	}
 	return "https://github.com/wbern/crm/blob/main"
 }
-

@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	MaxWholeFileSize = 128 * 1024 // 128 KiB cap per whole file
+	MaxWholeFileSize  = 128 * 1024 // 128 KiB cap per whole file
 	DefaultTokenRatio = 3.5
 
 	ComplexityUltraliteTokens = 250

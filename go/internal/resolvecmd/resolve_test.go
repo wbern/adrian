@@ -529,4 +529,3 @@ func TestResolve_FormatFlag_PRBlock(t *testing.T) {
 		t.Errorf("expected collapsible details tag, got:\n%s", outStr)
 	}
 }
-

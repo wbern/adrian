@@ -320,4 +320,3 @@ func TestCodePlan_BudgetProfileAndEnvOverrides(t *testing.T) {
 		t.Errorf("complexity_overhead = %d, want 250 (ultralite)", plan.Budget.ComplexityOverhead)
 	}
 }
-

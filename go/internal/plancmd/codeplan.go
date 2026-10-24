@@ -284,9 +284,10 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 			if parsed.Complexity != "" {
 				complexity = string(parsed.Complexity)
 			}
-			if parsed.DiffContextMode == adr.DiffContextFull {
+			switch parsed.DiffContextMode {
+			case adr.DiffContextFull:
 				diffCtx = "full"
-			} else if parsed.DiffContextMode == adr.DiffContextFunction {
+			case adr.DiffContextFunction:
 				diffCtx = "function"
 			}
 		}
