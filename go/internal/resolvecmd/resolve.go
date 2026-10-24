@@ -28,16 +28,9 @@ func Run(args []string, adrDir string, out io.Writer, errOut io.Writer) error {
 		topN          = 3
 		format        = "text"
 		codeReviewDoc string
-		repoURL       = "https://github.com/wbern/crm/blob/main"
+		repoURL       string
 		customAdrDir  = adrDir
 	)
-
-	// Determine repository root
-	repoRoot := "."
-	if customAdrDir != "" {
-		repoRoot = filepath.Dir(filepath.Dir(customAdrDir))
-	}
-	runner := OSGitRunner{Dir: repoRoot}
 
 	// Parse flags
 	for i := 0; i < len(args); i++ {
@@ -102,6 +95,17 @@ func Run(args []string, adrDir string, out io.Writer, errOut io.Writer) error {
 		default:
 			explicitFiles = append(explicitFiles, arg)
 		}
+	}
+
+	// Determine repository root
+	repoRoot := "."
+	if customAdrDir != "" {
+		repoRoot = filepath.Dir(filepath.Dir(customAdrDir))
+	}
+	runner := OSGitRunner{Dir: repoRoot}
+
+	if repoURL == "" {
+		repoURL = detectRepoURL(runner)
 	}
 
 	// 1. Resolve changed files
@@ -413,3 +417,24 @@ func printRankedText(out io.Writer, record FrontloadRecord, allRanked []RankedRu
 		_, _ = fmt.Fprintf(out, "\n  Proposed (advisory): %s\n", strings.Join(advIDs, ", "))
 	}
 }
+
+func detectRepoURL(runner GitRunner) string {
+	out, err := runner.RunGit("config", "--get", "remote.origin.url")
+	if err != nil {
+		return "https://github.com/wbern/crm/blob/main"
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return "https://github.com/wbern/crm/blob/main"
+	}
+	raw = strings.TrimSuffix(raw, ".git")
+	if strings.HasPrefix(raw, "git@github.com:") {
+		slug := strings.TrimPrefix(raw, "git@github.com:")
+		return fmt.Sprintf("https://github.com/%s/blob/main", slug)
+	}
+	if strings.HasPrefix(raw, "https://github.com/") {
+		return fmt.Sprintf("%s/blob/main", raw)
+	}
+	return "https://github.com/wbern/crm/blob/main"
+}
+

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -371,3 +372,161 @@ func TestRawFindingRow_PRString(t *testing.T) {
 		}
 	}
 }
+
+func testGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_AUTHOR_NAME=Test",
+		"GIT_AUTHOR_EMAIL=test@example.test",
+		"GIT_COMMITTER_NAME=Test",
+		"GIT_COMMITTER_EMAIL=test@example.test",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %s: %v", args, out, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func setupGitFixtureRepo(t *testing.T) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	testGit(t, dir, "init", "-q")
+	testGit(t, dir, "checkout", "-b", "main")
+
+	adrContent := `---
+status: accepted
+applies_to:
+  - "src/routes/**/*.tsx"
+tags:
+  - ux
+complexity: standard
+---
+
+# 1. Route Component Archetypes
+
+## Decision
+All routes must use PageShell.
+`
+	adrDir := filepath.Join(dir, "doc/adr")
+	if err := os.MkdirAll(adrDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(adrDir, "0001-routes.md"), []byte(adrContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	srcDir := filepath.Join(dir, "src/routes")
+	if err := os.MkdirAll(srcDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "app.tsx"), []byte("// initial\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	testGit(t, dir, "add", ".")
+	testGit(t, dir, "commit", "-qm", "initial commit")
+	baseCommit := testGit(t, dir, "rev-parse", "HEAD")
+
+	// Branch and modify
+	testGit(t, dir, "checkout", "-b", "feat/route-change")
+	if err := os.WriteFile(filepath.Join(srcDir, "app.tsx"), []byte("// modified\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testGit(t, dir, "commit", "-qam", "modify route")
+
+	return dir, baseCommit
+}
+
+func TestResolve_GitDiff_ExplicitBase(t *testing.T) {
+	dir, baseCommit := setupGitFixtureRepo(t)
+	adrDir := filepath.Join(dir, "doc/adr")
+
+	var stdout, stderr bytes.Buffer
+	args := []string{"--adr-dir", adrDir, "--base", baseCommit}
+
+	err := Run(args, adrDir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	outStr := stdout.String()
+	if !strings.Contains(outStr, "Accepted (enforced):") {
+		t.Errorf("expected Accepted (enforced), got:\n%s", outStr)
+	}
+	if !strings.Contains(outStr, "ADR-0001 — Route Component Archetypes") {
+		t.Errorf("expected ADR-0001, got:\n%s", outStr)
+	}
+}
+
+func TestResolve_GitDiff_DefaultBase(t *testing.T) {
+	dir, _ := setupGitFixtureRepo(t)
+	adrDir := filepath.Join(dir, "doc/adr")
+
+	// In this repo, 'main' exists, so default base falls back to 'main'
+	var stdout, stderr bytes.Buffer
+	args := []string{"--adr-dir", adrDir}
+
+	err := Run(args, adrDir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	outStr := stdout.String()
+	if !strings.Contains(outStr, "Accepted (enforced):") {
+		t.Errorf("expected Accepted (enforced) from default main base diff, got:\n%s", outStr)
+	}
+	if !strings.Contains(outStr, "ADR-0001 — Route Component Archetypes") {
+		t.Errorf("expected ADR-0001, got:\n%s", outStr)
+	}
+}
+
+func TestResolve_FormatFlag_JSON(t *testing.T) {
+	dir, baseCommit := setupGitFixtureRepo(t)
+	adrDir := filepath.Join(dir, "doc/adr")
+
+	var stdout, stderr bytes.Buffer
+	args := []string{"--adr-dir", adrDir, "--base", baseCommit, "--format", "json"}
+
+	err := Run(args, adrDir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	var rec FrontloadRecord
+	if jErr := json.Unmarshal(stdout.Bytes(), &rec); jErr != nil {
+		t.Fatalf("Unmarshal failed: %v, raw:\n%s", jErr, stdout.String())
+	}
+	if rec.Schema != FrontloadSchema {
+		t.Errorf("schema = %q, want %q", rec.Schema, FrontloadSchema)
+	}
+	if rec.ChangedFiles != 1 {
+		t.Errorf("changed_files = %d, want 1", rec.ChangedFiles)
+	}
+}
+
+func TestResolve_FormatFlag_PRBlock(t *testing.T) {
+	dir, baseCommit := setupGitFixtureRepo(t)
+	adrDir := filepath.Join(dir, "doc/adr")
+
+	var stdout, stderr bytes.Buffer
+	args := []string{"--adr-dir", adrDir, "--base", baseCommit, "--format", "pr-block"}
+
+	err := Run(args, adrDir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	outStr := stdout.String()
+	if !strings.Contains(outStr, FrontloadMarker) {
+		t.Errorf("expected FrontloadMarker, got:\n%s", outStr)
+	}
+	if !strings.Contains(outStr, "<details>") || !strings.Contains(outStr, "</details>") {
+		t.Errorf("expected collapsible details tag, got:\n%s", outStr)
+	}
+}
+
