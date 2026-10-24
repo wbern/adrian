@@ -19,7 +19,7 @@ import (
 	"github.com/wbern/adrian/go/internal/reviewpolicy"
 )
 
-const Usage = "adrian plan --base <ref> --head <ref> --policy <trusted-base-ref> [--format json] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--fanout-threshold-bytes <bytes>] [--config <path>]"
+const Usage = "adrian plan --base <ref> --head <ref> --policy <trusted-base-ref> [--format json] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--fanout-threshold-bytes <bytes>] [--max-plan-bytes <bytes>] [--config <path>]"
 
 func Run(args []string, adrDir string, out io.Writer) error {
 	return RunCLI(args, filepath.Dir(filepath.Dir(adrDir)), out)
@@ -30,9 +30,15 @@ func RunCLI(args []string, dir string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	git := gitReader{dir: dir, ctx: ctx}
+	var maxPlanBytes int64
+	if s, ok := opts["--max-plan-bytes"]; ok {
+		if n, err := strconv.ParseInt(s, 10, 64); err == nil && n > 0 {
+			maxPlanBytes = n
+		}
+	}
+	git := gitReader{dir: dir, ctx: ctx, maxBytes: maxPlanBytes}
 	root, err := git.run("rev-parse", "--show-toplevel")
 	if err != nil {
 		return err
@@ -90,7 +96,7 @@ func parseArgs(args []string) (map[string]string, error) {
 		switch flag {
 		case "--base", "--head", "--policy", "--format",
 			"--budget-profile", "--budget-mode", "--max-batch-bytes",
-			"--max-batch-segments", "--fanout-threshold-bytes", "--fanout-threshold-segments", "--config":
+			"--max-batch-segments", "--fanout-threshold-bytes", "--fanout-threshold-segments", "--max-plan-bytes", "--config":
 		default:
 			return nil, fmt.Errorf("unknown argument %q; usage: %s", flag, Usage)
 		}
@@ -115,8 +121,16 @@ func parseArgs(args []string) (map[string]string, error) {
 }
 
 type gitReader struct {
-	dir string
-	ctx context.Context
+	dir      string
+	ctx      context.Context
+	maxBytes int64
+}
+
+func (g gitReader) maxPlanBytes() int64 {
+	if g.maxBytes > 0 {
+		return g.maxBytes
+	}
+	return defaultMaxCodePlanBytes
 }
 
 var commitID = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
@@ -191,7 +205,7 @@ func (g gitReader) readPolicy(commit string) (reviewpolicy.Registry, []reviewpol
 			return registry, nil, err
 		}
 		policyBytes += len(contents)
-		if policyBytes > maxCodePlanBytes {
+		if int64(policyBytes) > g.maxPlanBytes() {
 			return registry, nil, fmt.Errorf("policy set exceeds byte budget")
 		}
 		a, err := reviewpolicy.ParseADR(item.path, contents, registry)
