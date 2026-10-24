@@ -20,7 +20,7 @@ const staticInstructionsHeader = "You are a code lint checker. Check if the code
 const staticInstructionsFooter = "```\n" +
 	"\n" +
 	"### Instructions:\n" +
-	"IMPORTANT: Your JSON response must be under 500 characters total. Be concise.\n" +
+	"IMPORTANT: Your JSON response must be under 1,000 characters total. Be concise.\n" +
 	"\n" +
 	"### How to Read the Diff\n" +
 	"\n" +
