@@ -48,6 +48,15 @@ func TestExecutePlanPublicCommandRequiresImmutableAttempt(t *testing.T) {
 	}
 }
 
+func TestResolvePublicCommandRouting(t *testing.T) {
+	for _, cmd := range []string{"resolve", "for-files"} {
+		var out, stderr bytes.Buffer
+		if code := Run("adrian", []string{cmd, "--help"}, &out, &stderr); code != 0 || !strings.Contains(out.String(), "adrian resolve") {
+			t.Fatalf("missing %s help: %d %s %s", cmd, code, out.String(), stderr.String())
+		}
+	}
+}
+
 func TestMakeCommandLintFn_EnvironmentVariables(t *testing.T) {
 	a := adr.ADR{
 		ID:              "0042",

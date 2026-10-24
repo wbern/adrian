@@ -62,6 +62,7 @@ func PreferFresherBase(base string, runner GitRunner, logErr io.Writer) (string,
 }
 
 // GetChangedFiles extracts the target file list based on CLI arguments.
+// When files are omitted, it resolves git diff against --base (defaulting to origin/main).
 func GetChangedFiles(explicitFiles []string, staged bool, base string, runner GitRunner, logErr io.Writer) ([]string, error) {
 	if len(explicitFiles) > 0 {
 		var out []string
@@ -82,17 +83,35 @@ func GetChangedFiles(explicitFiles []string, staged bool, base string, runner Gi
 		return splitLines(out), nil
 	}
 
-	if base != "" {
-		effectiveBase, _ := PreferFresherBase(base, runner, logErr)
-		tripleDot := fmt.Sprintf("%s...HEAD", effectiveBase)
-		out, err := runner.RunGit("diff", "--name-only", tripleDot)
-		if err != nil {
-			return nil, err
-		}
-		return splitLines(out), nil
+	effectiveBase := base
+	baseWasDefaulted := false
+	if effectiveBase == "" {
+		effectiveBase = "origin/main"
+		baseWasDefaulted = true
 	}
 
-	return nil, nil
+	if baseWasDefaulted {
+		// Verify if origin/main exists; fallback to main if only local main exists.
+		if _, err := runner.RunGit("rev-parse", "--verify", "--quiet", "origin/main^{commit}"); err != nil {
+			if _, err := runner.RunGit("rev-parse", "--verify", "--quiet", "main^{commit}"); err == nil {
+				effectiveBase = "main"
+			} else {
+				// Neither ref exists or not inside a valid git repository
+				return nil, nil
+			}
+		}
+	}
+
+	targetBase, _ := PreferFresherBase(effectiveBase, runner, logErr)
+	tripleDot := fmt.Sprintf("%s...HEAD", targetBase)
+	out, err := runner.RunGit("diff", "--name-only", tripleDot)
+	if err != nil {
+		if baseWasDefaulted {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return splitLines(out), nil
 }
 
 func splitLines(data []byte) []string {

@@ -2,6 +2,7 @@ package resolvecmd
 
 import (
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/wbern/adrian/go/internal/adr"
@@ -118,7 +119,13 @@ func (r RawFindingRow) PRString() string {
 	case string:
 		return v
 	case float64:
-		return json.Number(string(rune(int(v)))).String()
+		return strconv.Itoa(int(v))
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case json.Number:
+		return v.String()
 	default:
 		b, _ := json.Marshal(v)
 		return string(b)

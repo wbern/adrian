@@ -197,3 +197,126 @@ func TestDefaultSharedDeliveryRetainsOversizedPolicyWithBoundedAtoms(t *testing.
 		}
 	}
 }
+
+func TestCodePlan_PreemptiveCapacityBudgeting_Monolithic(t *testing.T) {
+	dir, _ := fixture(t)
+	write(t, dir, "src/login.tsx", "export const login = 'modified'\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "small change")
+	base := git(t, dir, "rev-parse", "HEAD~1")
+	head := git(t, dir, "rev-parse", "HEAD")
+
+	var out bytes.Buffer
+	args := []string{
+		"--base", base,
+		"--head", head,
+		"--policy", base,
+		"--repository", "wbern/crm",
+		"--budget-profile", "cloud-standard",
+	}
+	if err := RunCodeCLI(args, dir, &out); err != nil {
+		t.Fatal(err)
+	}
+
+	var plan CodePlan
+	if err := json.Unmarshal(out.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+
+	if plan.Budget == nil {
+		t.Fatal("expected non-nil plan.Budget")
+	}
+	if plan.Budget.Profile != "cloud-standard" {
+		t.Errorf("profile = %q, want cloud-standard", plan.Budget.Profile)
+	}
+	if plan.Budget.ExecutionMode != "monolithic_single" {
+		t.Errorf("execution_mode = %q, want monolithic_single", plan.Budget.ExecutionMode)
+	}
+	if plan.Budget.EstimatedTokens <= 0 {
+		t.Errorf("expected positive estimated tokens, got %d", plan.Budget.EstimatedTokens)
+	}
+	if plan.Budget.TargetBatchBudget != 60000 {
+		t.Errorf("target_batch_budget = %d, want 60000", plan.Budget.TargetBatchBudget)
+	}
+}
+
+func TestCodePlan_PreemptiveCapacityBudgeting_Partitioned_Fanout(t *testing.T) {
+	dir, _ := fixture(t)
+	write(t, dir, "src/login.tsx", "export const login = 'modified-fanout'\n")
+	write(t, dir, "src/profile.tsx", "export const profile = 'new-file'\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "multi-segment change")
+	base := git(t, dir, "rev-parse", "HEAD~1")
+	head := git(t, dir, "rev-parse", "HEAD")
+
+	var out bytes.Buffer
+	// Force fanout by setting threshold bytes very low
+	args := []string{
+		"--base", base,
+		"--head", head,
+		"--policy", base,
+		"--repository", "wbern/crm",
+		"--fanout-threshold-bytes", "10",
+		"--max-batch-segments", "1",
+	}
+	if err := RunCodeCLI(args, dir, &out); err != nil {
+		t.Fatal(err)
+	}
+
+	var plan CodePlan
+	if err := json.Unmarshal(out.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+
+	if plan.Budget == nil {
+		t.Fatal("expected non-nil plan.Budget")
+	}
+	if plan.Budget.ExecutionMode != "partitioned_fanout" {
+		t.Errorf("execution_mode = %q, want partitioned_fanout", plan.Budget.ExecutionMode)
+	}
+	if len(plan.Budget.Batches) == 0 {
+		t.Fatal("expected partitioned batches to be populated")
+	}
+}
+
+func TestCodePlan_BudgetProfileAndEnvOverrides(t *testing.T) {
+	dir, _ := fixture(t)
+	write(t, dir, "src/login.tsx", "export const login = 'env-override'\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "env change")
+	base := git(t, dir, "rev-parse", "HEAD~1")
+	head := git(t, dir, "rev-parse", "HEAD")
+
+	os.Setenv("ADRIAN_COMPLEXITY", "ultralite")
+	defer os.Unsetenv("ADRIAN_COMPLEXITY")
+
+	var out bytes.Buffer
+	args := []string{
+		"--base", base,
+		"--head", head,
+		"--policy", base,
+		"--repository", "wbern/crm",
+		"--budget-profile", "local-edge",
+	}
+	if err := RunCodeCLI(args, dir, &out); err != nil {
+		t.Fatal(err)
+	}
+
+	var plan CodePlan
+	if err := json.Unmarshal(out.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+
+	if plan.Budget == nil {
+		t.Fatal("expected non-nil plan.Budget")
+	}
+	if plan.Budget.Profile != "local-edge" {
+		t.Errorf("profile = %q, want local-edge", plan.Budget.Profile)
+	}
+	if plan.Budget.TargetBatchBudget != 4000 {
+		t.Errorf("target_batch_budget = %d, want 4000", plan.Budget.TargetBatchBudget)
+	}
+	if plan.Budget.ComplexityOverhead != 250 {
+		t.Errorf("complexity_overhead = %d, want 250 (ultralite)", plan.Budget.ComplexityOverhead)
+	}
+}
