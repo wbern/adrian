@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/wbern/adrian/compare/v0.9.0...v0.10.0) (2026-10-24)
+
+
+### Features
+
+* first-class rule resolution and preemptive capacity budgeting engine ([#30](https://github.com/wbern/adrian/issues/30)) ([b0435d1](https://github.com/wbern/adrian/commit/b0435d10d8b5c92f2333a71a65d4d76d4c81556e))
+
 ## [0.9.0](https://github.com/wbern/adrian/compare/v0.8.0...v0.9.0) (2026-10-23)
 
 
