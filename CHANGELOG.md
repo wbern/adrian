@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/wbern/adrian/compare/v0.10.0...v0.10.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **plancmd,resolvecmd:** scale code-plan byte budgets and canonicalize legacy lens weights ([#32](https://github.com/wbern/adrian/issues/32)) ([6ecc015](https://github.com/wbern/adrian/commit/6ecc015a44e2e6dd33ec94e4ff9620ed6ca8b952))
+
 ## [0.10.0](https://github.com/wbern/adrian/compare/v0.9.0...v0.10.0) (2026-10-24)
 
 
