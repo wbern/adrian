@@ -19,12 +19,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/wbern/adrian/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/budget"
 	"github.com/wbern/adrian/go/internal/reviewpacket"
 	"github.com/wbern/adrian/go/internal/reviewplan"
 	"github.com/wbern/adrian/go/internal/sharedpacket"
 )
 
-const CodeUsage = "adrian code-plan --repository <owner/name> --base <ref> --head <ref> --policy <trusted-base-ref> [--legacy-packets]"
+const CodeUsage = "adrian code-plan --repository <owner/name> --base <ref> --head <ref> --policy <trusted-base-ref> [--legacy-packets] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--fanout-threshold-bytes <bytes>] [--fanout-threshold-segments <n>] [--config <path>]"
 const maxCodePlanBytes = 8 * 1024 * 1024
 
 // CodePlan is an immutable source inventory, not an assessment or approval.
@@ -43,6 +44,7 @@ type CodePlan struct {
 	Diff           string                  `json:"diff"`
 	DiffSHA256     string                  `json:"diff_sha256"`
 	Fingerprint    string                  `json:"fingerprint"`
+	Budget         *budget.PlanSummary     `json:"budget,omitempty"`
 }
 type ContentRecord struct {
 	reviewplan.PathVersion
@@ -65,26 +67,94 @@ func RunCode(args []string, adrDir string, out io.Writer) error {
 }
 
 func RunCodeCLI(args []string, dir string, out io.Writer) error {
-	var repository string
-	legacy := false
-	planArgs := []string{}
+	var (
+		repository              string
+		legacy                  bool
+		budgetProfile           string
+		budgetMode              string
+		maxBatchBytes           int64
+		maxBatchSegments        int
+		fanoutThresholdBytes    int64
+		fanoutThresholdSegments int
+		configFile              string
+		planArgs                []string
+	)
+
 	for i := 0; i < len(args); i++ {
-		if args[i] == "--legacy-packets" {
+		arg := args[i]
+		switch arg {
+		case "--legacy-packets":
 			if legacy {
 				return fmt.Errorf("duplicate legacy packet option")
 			}
 			legacy = true
-			continue
+		case "--repository":
+			if repository != "" || i+1 >= len(args) {
+				return fmt.Errorf("repository must be specified once; %s", CodeUsage)
+			}
+			i++
+			repository = args[i]
+		case "--budget-profile":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--budget-profile requires a profile name (e.g. cloud-high, cloud-standard, local-edge)")
+			}
+			i++
+			budgetProfile = args[i]
+		case "--budget-mode":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--budget-mode requires a mode (auto, monolithic, partitioned)")
+			}
+			i++
+			budgetMode = args[i]
+		case "--max-batch-bytes":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--max-batch-bytes requires a byte count")
+			}
+			i++
+			n, err := strconv.ParseInt(args[i], 10, 64)
+			if err != nil || n <= 0 {
+				return fmt.Errorf("invalid --max-batch-bytes: %s", args[i])
+			}
+			maxBatchBytes = n
+		case "--max-batch-segments":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--max-batch-segments requires an integer count")
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n <= 0 {
+				return fmt.Errorf("invalid --max-batch-segments: %s", args[i])
+			}
+			maxBatchSegments = n
+		case "--fanout-threshold-bytes":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--fanout-threshold-bytes requires a byte count")
+			}
+			i++
+			n, err := strconv.ParseInt(args[i], 10, 64)
+			if err != nil || n <= 0 {
+				return fmt.Errorf("invalid --fanout-threshold-bytes: %s", args[i])
+			}
+			fanoutThresholdBytes = n
+		case "--fanout-threshold-segments":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--fanout-threshold-segments requires an integer count")
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n <= 0 {
+				return fmt.Errorf("invalid --fanout-threshold-segments: %s", args[i])
+			}
+			fanoutThresholdSegments = n
+		case "--config":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--config requires a file path")
+			}
+			i++
+			configFile = args[i]
+		default:
+			planArgs = append(planArgs, arg)
 		}
-		if args[i] != "--repository" {
-			planArgs = append(planArgs, args[i])
-			continue
-		}
-		if repository != "" || i+1 >= len(args) {
-			return fmt.Errorf("repository must be specified once; %s", CodeUsage)
-		}
-		i++
-		repository = args[i]
 	}
 	if !regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`).MatchString(repository) {
 		return fmt.Errorf("trusted repository owner/name required; %s", CodeUsage)
@@ -163,6 +233,197 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 			return err
 		}
 	}
+
+	// Preemptive Capacity Budgeting
+	cfg, profiles, err := budget.LoadConfig(configFile, g.dir)
+	if err != nil {
+		return err
+	}
+	if budgetMode != "" {
+		cfg.Mode = budgetMode
+	}
+	if maxBatchBytes > 0 {
+		cfg.BatchMaxBytes = maxBatchBytes
+	}
+	if maxBatchSegments > 0 {
+		cfg.BatchMaxSegments = maxBatchSegments
+	}
+	if fanoutThresholdBytes > 0 {
+		cfg.FanoutThresholdBytes = fanoutThresholdBytes
+	}
+	if fanoutThresholdSegments > 0 {
+		cfg.FanoutThresholdSegments = fanoutThresholdSegments
+	}
+
+	activeProfile := budget.ResolveProfile(profiles, budgetProfile, cfg.DefaultProfile)
+
+	policyByPath := make(map[string]PolicyRecord)
+	for _, pol := range p.Policies {
+		policyByPath[pol.Path] = pol
+	}
+
+	contentByPath := make(map[string]int64)
+	for _, c := range p.Content {
+		contentByPath[c.Path] = int64(len(c.Content))
+	}
+
+	type pathADRInfo struct {
+		adrBytes    int64
+		complexity  string
+		diffContext string
+	}
+	pathInfo := make(map[string]pathADRInfo)
+	for _, row := range p.Coverage.Applicability {
+		rawPol, hasPol := policyByPath[row.File]
+		polBytes := int64(0)
+		complexity := "standard"
+		diffCtx := "none"
+		if hasPol {
+			parsed := adr.ParseADR(rawPol.Content, rawPol.Path)
+			polBytes = int64(len(rawPol.Content))
+			if parsed.Complexity != "" {
+				complexity = string(parsed.Complexity)
+			}
+			if parsed.DiffContextMode == adr.DiffContextFull {
+				diffCtx = "full"
+			} else if parsed.DiffContextMode == adr.DiffContextFunction {
+				diffCtx = "function"
+			}
+		}
+
+		for _, path := range row.Paths {
+			existing := pathInfo[path]
+			existing.adrBytes += polBytes
+			if existing.complexity == "" || complexity == "complex" {
+				existing.complexity = complexity
+			}
+			if diffCtx == "full" || (diffCtx == "function" && existing.diffContext != "full") {
+				existing.diffContext = diffCtx
+			}
+			pathInfo[path] = existing
+		}
+	}
+
+	var dominantComplexity string
+	var dominantDiffContext string
+	var totalBindingADRBytes int64
+	var totalFullContextBytes int64
+	segments := make([]budget.Segment, 0)
+
+	if len(p.ChangeDiffs) > 0 {
+		for idx, cd := range p.ChangeDiffs {
+			segDiffBytes := int64(len(cd.Diff))
+			segADRBytes := int64(0)
+			segFullContextBytes := int64(0)
+			segComplexity := "standard"
+			segDiffContext := "none"
+
+			for _, path := range cd.Paths {
+				if info, ok := pathInfo[path]; ok {
+					segADRBytes += info.adrBytes
+					if info.complexity == "complex" || (info.complexity == "standard" && segComplexity != "complex") {
+						segComplexity = info.complexity
+					}
+					if info.diffContext == "full" || (info.diffContext == "function" && segDiffContext != "full") {
+						segDiffContext = info.diffContext
+					}
+				}
+				if segDiffContext == "full" {
+					if size, ok := contentByPath[path]; ok {
+						if size > budget.MaxWholeFileSize {
+							size = budget.MaxWholeFileSize
+						}
+						segFullContextBytes += size
+					}
+				}
+			}
+
+			if dominantComplexity == "" || segComplexity == "complex" {
+				dominantComplexity = segComplexity
+			}
+			if segDiffContext == "full" || (segDiffContext == "function" && dominantDiffContext != "full") {
+				dominantDiffContext = segDiffContext
+			}
+
+			segTokens, _ := budget.EstimateTokens(segDiffBytes, segADRBytes, segFullContextBytes, segComplexity, segDiffContext, activeProfile)
+
+			segments = append(segments, budget.Segment{
+				ID:               idx + 1,
+				Bytes:            segDiffBytes,
+				Paths:            cd.Paths,
+				FullContextBytes: segFullContextBytes,
+				BindingADRBytes:  segADRBytes,
+				EstimatedTokens:  segTokens,
+			})
+		}
+	} else if len(p.Coverage.Semantic.Changes) > 0 {
+		for idx, c := range p.Coverage.Semantic.Changes {
+			paths := []string{c.Path}
+			if c.OldPath != "" && c.OldPath != c.Path {
+				paths = append(paths, c.OldPath)
+			}
+			segDiffBytes := int64(len(p.Diff)) / int64(len(p.Coverage.Semantic.Changes))
+			segADRBytes := int64(0)
+			segFullContextBytes := int64(0)
+			segComplexity := "standard"
+			segDiffContext := "none"
+
+			for _, path := range paths {
+				if info, ok := pathInfo[path]; ok {
+					segADRBytes += info.adrBytes
+					if info.complexity == "complex" || (info.complexity == "standard" && segComplexity != "complex") {
+						segComplexity = info.complexity
+					}
+					if info.diffContext == "full" || (info.diffContext == "function" && segDiffContext != "full") {
+						segDiffContext = info.diffContext
+					}
+				}
+				if segDiffContext == "full" {
+					if size, ok := contentByPath[path]; ok {
+						if size > budget.MaxWholeFileSize {
+							size = budget.MaxWholeFileSize
+						}
+						segFullContextBytes += size
+					}
+				}
+			}
+
+			if dominantComplexity == "" || segComplexity == "complex" {
+				dominantComplexity = segComplexity
+			}
+			if segDiffContext == "full" || (segDiffContext == "function" && dominantDiffContext != "full") {
+				dominantDiffContext = segDiffContext
+			}
+
+			segTokens, _ := budget.EstimateTokens(segDiffBytes, segADRBytes, segFullContextBytes, segComplexity, segDiffContext, activeProfile)
+
+			segments = append(segments, budget.Segment{
+				ID:               idx + 1,
+				Bytes:            segDiffBytes,
+				Paths:            paths,
+				FullContextBytes: segFullContextBytes,
+				BindingADRBytes:  segADRBytes,
+				EstimatedTokens:  segTokens,
+			})
+		}
+	}
+
+	for _, seg := range segments {
+		totalBindingADRBytes += seg.BindingADRBytes
+		totalFullContextBytes += seg.FullContextBytes
+	}
+
+	if dominantComplexity == "" {
+		dominantComplexity = "standard"
+	}
+	if dominantDiffContext == "" {
+		dominantDiffContext = "none"
+	}
+
+	totalDiffBytes := int64(len(p.Diff))
+	summary := budget.BuildPlanSummary(segments, totalDiffBytes, totalBindingADRBytes, totalFullContextBytes, dominantComplexity, dominantDiffContext, activeProfile, cfg)
+	p.Budget = &summary
+
 	raw, err := json.Marshal(p)
 	if err != nil {
 		return err
