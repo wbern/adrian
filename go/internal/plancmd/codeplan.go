@@ -25,8 +25,8 @@ import (
 	"github.com/wbern/adrian/go/internal/sharedpacket"
 )
 
-const CodeUsage = "adrian code-plan --repository <owner/name> --base <ref> --head <ref> --policy <trusted-base-ref> [--legacy-packets] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--fanout-threshold-bytes <bytes>] [--fanout-threshold-segments <n>] [--config <path>]"
-const maxCodePlanBytes = 8 * 1024 * 1024
+const CodeUsage = "adrian code-plan --repository <owner/name> --base <ref> --head <ref> --policy <trusted-base-ref> [--legacy-packets] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--fanout-threshold-bytes <bytes>] [--fanout-threshold-segments <n>] [--max-plan-bytes <bytes>] [--config <path>]"
+const defaultMaxCodePlanBytes int64 = 64 * 1024 * 1024
 
 // CodePlan is an immutable source inventory, not an assessment or approval.
 // Repository is supplied by the trusted caller and must be independently checked
@@ -76,6 +76,7 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 		maxBatchSegments        int
 		fanoutThresholdBytes    int64
 		fanoutThresholdSegments int
+		maxPlanBytes            = defaultMaxCodePlanBytes
 		configFile              string
 		planArgs                []string
 	)
@@ -146,6 +147,17 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 				return fmt.Errorf("invalid --fanout-threshold-segments: %s", args[i])
 			}
 			fanoutThresholdSegments = n
+		case "--max-plan-bytes":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--max-plan-bytes requires a byte count")
+			}
+			i++
+			n, err := strconv.ParseInt(args[i], 10, 64)
+			if err != nil || n <= 0 {
+				return fmt.Errorf("invalid --max-plan-bytes: %s", args[i])
+			}
+			maxPlanBytes = n
+			planArgs = append(planArgs, arg, args[i])
 		case "--config":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--config requires a file path")
@@ -169,9 +181,9 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 	if err := json.Unmarshal(semanticJSON.Bytes(), &semantic); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	g := gitReader{dir: dir, ctx: ctx}
+	g := gitReader{dir: dir, ctx: ctx, maxBytes: maxPlanBytes}
 	root, err := g.run("rev-parse", "--show-toplevel")
 	if err != nil {
 		return err
@@ -183,19 +195,20 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 	}
 	coverage := reviewplan.BuildCoverage(semantic.Provenance, semantic.Changes, policies, registry)
 	p := CodePlan{Schema: "adrian-code-plan-v2", Repository: repository, Coverage: coverage, Content: []ContentRecord{}, Policies: []PolicyRecord{}}
-	total := 0
+	sourceTotal := 0
 	for _, v := range coverage.Baseline {
 		record, err := g.content(v)
 		if err != nil {
 			return err
 		}
-		total += len(record.Content)
-		if total > maxCodePlanBytes {
+		sourceTotal += len(record.Content)
+		if int64(sourceTotal) > g.maxPlanBytes() {
 			return fmt.Errorf("code plan source exceeds byte budget")
 		}
 		p.Content = append(p.Content, record)
 	}
 	seen := map[string]bool{}
+	policyTotal := 0
 	for _, row := range coverage.Applicability {
 		if seen[row.File] {
 			continue
@@ -208,8 +221,8 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 		if !utf8.Valid(raw) {
 			return fmt.Errorf("policy is not UTF-8: %s", row.File)
 		}
-		total += len(raw)
-		if total > maxCodePlanBytes {
+		policyTotal += len(raw)
+		if int64(policyTotal) > g.maxPlanBytes() {
 			return fmt.Errorf("code plan policy exceeds byte budget")
 		}
 		p.Policies = append(p.Policies, PolicyRecord{ADR: row.ADR, Path: row.File, Content: string(raw), SHA256: digest(raw)})
@@ -434,7 +447,7 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if len(raw) > maxCodePlanBytes {
+	if int64(len(raw)) > g.maxPlanBytes() {
 		return fmt.Errorf("encoded code plan exceeds byte budget")
 	}
 	_, err = out.Write(append(raw, '\n'))
@@ -492,7 +505,7 @@ func (g gitReader) blob(object string) ([]byte, error) {
 		return nil, err
 	}
 	size, err := strconv.ParseInt(strings.TrimSpace(string(raw)), 10, 64)
-	if err != nil || size < 0 || size > maxCodePlanBytes {
+	if err != nil || size < 0 || size > g.maxPlanBytes() {
 		return nil, fmt.Errorf("blob exceeds byte budget")
 	}
 	return g.runBounded("cat-file", "blob", object)
@@ -511,10 +524,13 @@ func cleanGitEnvironment() []string {
 	return append(env, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_NO_LAZY_FETCH=1", "GIT_NO_REPLACE_OBJECTS=1", "GIT_TERMINAL_PROMPT=0")
 }
 
-type boundedBuffer struct{ bytes.Buffer }
+type boundedBuffer struct {
+	bytes.Buffer
+	limit int64
+}
 
 func (b *boundedBuffer) Write(raw []byte) (int, error) {
-	if len(raw) > maxCodePlanBytes-b.Len() {
+	if int64(len(raw)) > b.limit-int64(b.Len()) {
 		return 0, fmt.Errorf("git output exceeds byte budget")
 	}
 	return b.Buffer.Write(raw)
@@ -530,8 +546,9 @@ func (g gitReader) runBounded(args ...string) ([]byte, error) {
 	cmd.WaitDelay = time.Second
 	cmd.Dir = g.dir
 	cmd.Env = cleanGitEnvironment()
-	var out boundedBuffer
-	var stderr boundedBuffer
+	limit := g.maxPlanBytes()
+	out := boundedBuffer{limit: limit}
+	stderr := boundedBuffer{limit: 1024 * 1024}
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

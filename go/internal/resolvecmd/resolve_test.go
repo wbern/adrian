@@ -373,6 +373,62 @@ func TestRawFindingRow_PRString(t *testing.T) {
 	}
 }
 
+func TestCanonicalRuleID(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"lens#1", "ADR-0102"},
+		{"lens#2", "ADR-0103"},
+		{"lens#11", "ADR-0112"},
+		{"lens#12", "ADR-0068"},
+		{"lens#13", "ADR-0088"},
+		{"ADR-0004", "ADR-0004"},
+		{"unknown", "unknown"},
+	}
+	for _, tc := range cases {
+		got := CanonicalRuleID(tc.input)
+		if got != tc.want {
+			t.Errorf("CanonicalRuleID(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestWeightsFromRows_CanonicalMapping(t *testing.T) {
+	rows := []RawFindingRow{
+		{
+			RuleID: "lens#2",
+			File:   "src/components/DataTable.tsx",
+			PR:     "100",
+			Day:    "2026-09-01",
+		},
+		{
+			RuleID: "ADR-0103",
+			File:   "src/components/DataTable.tsx",
+			PR:     "101",
+			Day:    "2026-09-02",
+		},
+	}
+	w := WeightsFromRows(rows, "test", "2026-08-01")
+	bucket, ok := w.Buckets["src/components/**"]
+	if !ok {
+		t.Fatalf("expected bucket src/components/**")
+	}
+	if len(bucket.Rules) != 1 {
+		t.Fatalf("expected 1 unified rule for lens#2 and ADR-0103, got %d", len(bucket.Rules))
+	}
+	entry := bucket.Rules[0]
+	if entry.ID != "ADR-0103" {
+		t.Errorf("entry.ID = %q, want ADR-0103", entry.ID)
+	}
+	if entry.Findings != 2 {
+		t.Errorf("entry.Findings = %d, want 2", entry.Findings)
+	}
+	if entry.PRs != 2 {
+		t.Errorf("entry.PRs = %d, want 2", entry.PRs)
+	}
+}
+
 func testGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
