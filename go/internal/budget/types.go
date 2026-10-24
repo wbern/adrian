@@ -4,6 +4,7 @@ package budget
 const (
 	ProfileCloudHigh     = "cloud-high"
 	ProfileCloudStandard = "cloud-standard"
+	ProfileCloudEconomy  = "cloud-economy"
 	ProfileLocalEdge     = "local-edge"
 )
 
@@ -52,6 +53,16 @@ func StandardProfiles() map[string]Profile {
 			AllowFullFileContext: true,
 			AllowADRBodies:       true,
 		},
+		ProfileCloudEconomy: {
+			Name:                 ProfileCloudEconomy,
+			ContextWindow:        128000,
+			TargetBatchBudget:    32000,
+			TokenRatio:           3.5,
+			MaxParallelAgents:    4,
+			PreferredAdapter:     "claude-haiku",
+			AllowFullFileContext: false,
+			AllowADRBodies:       true,
+		},
 		ProfileLocalEdge: {
 			Name:                 ProfileLocalEdge,
 			ContextWindow:        8192,
@@ -73,6 +84,7 @@ type BudgetConfig struct {
 	FanoutThresholdSegments int     `json:"fanout_threshold_segments" toml:"fanout_threshold_segments"`
 	BatchMaxBytes           int64   `json:"batch_max_bytes" toml:"batch_max_bytes"`
 	BatchMaxSegments        int     `json:"batch_max_segments" toml:"batch_max_segments"`
+	MaxBatches              int     `json:"max_batches" toml:"max_batches"`
 	SafetyMargin            float64 `json:"safety_margin" toml:"safety_margin"`
 }
 
@@ -85,6 +97,7 @@ func DefaultConfig() BudgetConfig {
 		FanoutThresholdSegments: 2,
 		BatchMaxBytes:           200000, // 200 KB
 		BatchMaxSegments:        4,
+		MaxBatches:              32,
 		SafetyMargin:            0.20,
 	}
 }

@@ -25,7 +25,7 @@ import (
 	"github.com/wbern/adrian/go/internal/sharedpacket"
 )
 
-const CodeUsage = "adrian code-plan --repository <owner/name> --base <ref> --head <ref> --policy <trusted-base-ref> [--legacy-packets] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--fanout-threshold-bytes <bytes>] [--fanout-threshold-segments <n>] [--max-plan-bytes <bytes>] [--config <path>]"
+const CodeUsage = "adrian code-plan --repository <owner/name> --base <ref> --head <ref> --policy <trusted-base-ref> [--legacy-packets] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--max-batches <n>] [--fanout-threshold-bytes <bytes>] [--fanout-threshold-segments <n>] [--max-plan-bytes <bytes>] [--config <path>]"
 const defaultMaxCodePlanBytes int64 = 64 * 1024 * 1024
 
 // CodePlan is an immutable source inventory, not an assessment or approval.
@@ -74,6 +74,7 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 		budgetMode              string
 		maxBatchBytes           int64
 		maxBatchSegments        int
+		maxBatches              int
 		fanoutThresholdBytes    int64
 		fanoutThresholdSegments int
 		maxPlanBytes            = defaultMaxCodePlanBytes
@@ -127,6 +128,16 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 				return fmt.Errorf("invalid --max-batch-segments: %s", args[i])
 			}
 			maxBatchSegments = n
+		case "--max-batches":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--max-batches requires an integer count")
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n <= 0 {
+				return fmt.Errorf("invalid --max-batches: %s", args[i])
+			}
+			maxBatches = n
 		case "--fanout-threshold-bytes":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--fanout-threshold-bytes requires a byte count")
@@ -260,6 +271,9 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 	}
 	if maxBatchSegments > 0 {
 		cfg.BatchMaxSegments = maxBatchSegments
+	}
+	if maxBatches > 0 {
+		cfg.MaxBatches = maxBatches
 	}
 	if fanoutThresholdBytes > 0 {
 		cfg.FanoutThresholdBytes = fanoutThresholdBytes

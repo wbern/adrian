@@ -320,3 +320,48 @@ func TestCodePlan_BudgetProfileAndEnvOverrides(t *testing.T) {
 		t.Errorf("complexity_overhead = %d, want 250 (ultralite)", plan.Budget.ComplexityOverhead)
 	}
 }
+
+func TestCodePlan_MaxBatchesAndCloudEconomy(t *testing.T) {
+	dir, _ := fixture(t)
+	write(t, dir, "src/a.tsx", "export const a = 1\n")
+	write(t, dir, "src/b.tsx", "export const b = 2\n")
+	write(t, dir, "src/c.tsx", "export const c = 3\n")
+	write(t, dir, "src/d.tsx", "export const d = 4\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "four segments")
+	base := git(t, dir, "rev-parse", "HEAD~1")
+	head := git(t, dir, "rev-parse", "HEAD")
+
+	var out bytes.Buffer
+	args := []string{
+		"--base", base,
+		"--head", head,
+		"--policy", base,
+		"--repository", "wbern/crm",
+		"--budget-profile", "cloud-economy",
+		"--fanout-threshold-bytes", "1",
+		"--max-batch-segments", "1",
+		"--max-batches", "2",
+	}
+	if err := RunCodeCLI(args, dir, &out); err != nil {
+		t.Fatal(err)
+	}
+
+	var plan CodePlan
+	if err := json.Unmarshal(out.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+
+	if plan.Budget == nil {
+		t.Fatal("expected non-nil plan.Budget")
+	}
+	if plan.Budget.Profile != "cloud-economy" {
+		t.Errorf("profile = %q, want cloud-economy", plan.Budget.Profile)
+	}
+	if plan.Budget.TargetBatchBudget != 32000 {
+		t.Errorf("target_batch_budget = %d, want 32000", plan.Budget.TargetBatchBudget)
+	}
+	if len(plan.Budget.Batches) != 2 {
+		t.Errorf("expected 2 consolidated batches, got %d", len(plan.Budget.Batches))
+	}
+}

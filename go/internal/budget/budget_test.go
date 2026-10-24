@@ -19,6 +19,11 @@ func TestStandardProfiles(t *testing.T) {
 		t.Errorf("unexpected cloud-standard profile: %+v", cs)
 	}
 
+	ce, ok := profiles[ProfileCloudEconomy]
+	if !ok || ce.TargetBatchBudget != 32000 || ce.MaxParallelAgents != 4 || ce.PreferredAdapter != "claude-haiku" || ce.AllowFullFileContext || !ce.AllowADRBodies {
+		t.Errorf("unexpected cloud-economy profile: %+v", ce)
+	}
+
 	le, ok := profiles[ProfileLocalEdge]
 	if !ok || le.TargetBatchBudget != 4000 || le.MaxParallelAgents != 1 || le.AllowFullFileContext || le.AllowADRBodies {
 		t.Errorf("unexpected local-edge profile: %+v", le)
@@ -171,6 +176,51 @@ func TestPartitionSegments_AffinityAndLimits(t *testing.T) {
 	}
 }
 
+func TestPartitionSegments_MaxBatchesConsolidation(t *testing.T) {
+	profile := StandardProfiles()[ProfileCloudStandard]
+	cfg := BudgetConfig{
+		Mode:             ModeAuto,
+		BatchMaxBytes:    1000,
+		BatchMaxSegments: 1, // Without MaxBatches, this would make 10 batches
+		MaxBatches:       3, // Consolidates into at most 3 batches
+	}
+
+	segs := make([]Segment, 10)
+	for i := 0; i < 10; i++ {
+		segs[i] = Segment{
+			ID:              i + 1,
+			Bytes:           100,
+			Paths:           []string{filepath.Join("src", "routes", "file.tsx")},
+			EstimatedTokens: (i + 1) * 100,
+		}
+	}
+
+	batches := PartitionSegments(segs, profile, cfg)
+	if len(batches) != 3 {
+		t.Fatalf("expected 3 batches after consolidation, got %d", len(batches))
+	}
+
+	totalSegments := 0
+	seenIDs := make(map[int]bool)
+	for i, b := range batches {
+		expectedID := filepath.Base(b.BatchID)
+		if expectedID != b.BatchID {
+			t.Errorf("unexpected batch id: %s", b.BatchID)
+		}
+		totalSegments += len(b.Segments)
+		for _, id := range b.SegmentIDs {
+			if seenIDs[id] {
+				t.Errorf("duplicate segment ID %d in batch %d", id, i)
+			}
+			seenIDs[id] = true
+		}
+	}
+
+	if totalSegments != 10 {
+		t.Errorf("expected all 10 segments preserved, got %d", totalSegments)
+	}
+}
+
 func TestLoadConfig_TOMLAndEnv(t *testing.T) {
 	dir := t.TempDir()
 	tomlContent := `
@@ -183,6 +233,7 @@ fanout_threshold_bytes = 150000
 fanout_threshold_segments = 3
 batch_max_bytes = 100000
 batch_max_segments = 2
+max_batches = 16
 safety_margin = 0.15
 
 [budget.profiles.custom-fast]
@@ -211,6 +262,9 @@ preferred_adapter = "claude"
 	if cfg.BatchMaxSegments != 2 {
 		t.Errorf("expected BatchMaxSegments 2, got %d", cfg.BatchMaxSegments)
 	}
+	if cfg.MaxBatches != 16 {
+		t.Errorf("expected MaxBatches 16, got %d", cfg.MaxBatches)
+	}
 
 	custom, ok := profiles["custom-fast"]
 	if !ok || custom.TargetBatchBudget != 10000 || custom.MaxParallelAgents != 6 {
@@ -220,9 +274,14 @@ preferred_adapter = "claude"
 	// Test environment override
 	os.Setenv("ADRIAN_BUDGET_PROFILE", "local-edge")
 	defer os.Unsetenv("ADRIAN_BUDGET_PROFILE")
+	os.Setenv("ADRIAN_MAX_BATCHES", "8")
+	defer os.Unsetenv("ADRIAN_MAX_BATCHES")
 
 	cfgEnv, _, _ := LoadConfig(configPath, dir)
 	if cfgEnv.DefaultProfile != "local-edge" {
 		t.Errorf("expected env override to local-edge, got %s", cfgEnv.DefaultProfile)
+	}
+	if cfgEnv.MaxBatches != 8 {
+		t.Errorf("expected env override to 8 MaxBatches, got %d", cfgEnv.MaxBatches)
 	}
 }

@@ -130,7 +130,67 @@ func PartitionSegments(segs []Segment, profile Profile, cfg BudgetConfig) []Batc
 		sort.Ints(batches[i].SegmentIDs)
 	}
 
+	maxBatches := cfg.MaxBatches
+	if maxBatches > 0 && len(batches) > maxBatches {
+		batches = consolidateBatches(batches, maxBatches)
+	}
+
 	return batches
+}
+
+func consolidateBatches(batches []Batch, maxBatches int) []Batch {
+	if maxBatches <= 0 || len(batches) <= maxBatches {
+		return batches
+	}
+
+	var allSegs []Segment
+	for _, b := range batches {
+		allSegs = append(allSegs, b.Segments...)
+	}
+
+	sort.SliceStable(allSegs, func(i, j int) bool {
+		if allSegs[i].EstimatedTokens != allSegs[j].EstimatedTokens {
+			return allSegs[i].EstimatedTokens > allSegs[j].EstimatedTokens
+		}
+		return allSegs[i].Bytes > allSegs[j].Bytes
+	})
+
+	bins := make([]Batch, maxBatches)
+	for i := 0; i < maxBatches; i++ {
+		bins[i] = Batch{
+			BatchID: fmt.Sprintf("batch-%d", i+1),
+		}
+	}
+
+	for _, seg := range allSegs {
+		minIdx := 0
+		for i := 1; i < maxBatches; i++ {
+			if bins[i].EstimatedTokens < bins[minIdx].EstimatedTokens ||
+				(bins[i].EstimatedTokens == bins[minIdx].EstimatedTokens && bins[i].Bytes < bins[minIdx].Bytes) {
+				minIdx = i
+			}
+		}
+
+		b := &bins[minIdx]
+		b.Segments = append(b.Segments, seg)
+		b.SegmentIDs = append(b.SegmentIDs, seg.ID)
+		b.Bytes += seg.Bytes
+		b.Paths = mergeUniquePaths(b.Paths, seg.Paths)
+		b.EstimatedTokens += seg.EstimatedTokens
+	}
+
+	var result []Batch
+	count := 1
+	for _, b := range bins {
+		if len(b.Segments) > 0 {
+			sort.Ints(b.SegmentIDs)
+			b.BatchID = fmt.Sprintf("batch-%d", count)
+			count++
+			result = append(result, b)
+		}
+	}
+
+	return result
 }
 
 // BuildPlanSummary computes the capacity plan, evaluates the mode, and partitions if needed.

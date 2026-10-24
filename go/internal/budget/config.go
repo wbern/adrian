@@ -86,6 +86,11 @@ func applyEnvOverrides(cfg *BudgetConfig) {
 			cfg.BatchMaxSegments = n
 		}
 	}
+	if v := getFirstEnv("ADRIAN_MAX_BATCHES", "PR_REVIEW_MAX_BATCHES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.MaxBatches = n
+		}
+	}
 }
 
 func getFirstEnv(keys ...string) string {
@@ -163,6 +168,10 @@ func parseTOMLFile(path string, cfg *BudgetConfig, profiles map[string]Profile) 
 			case "batch_max_segments":
 				if n, err := strconv.Atoi(val); err == nil {
 					cfg.BatchMaxSegments = n
+				}
+			case "max_batches":
+				if n, err := strconv.Atoi(val); err == nil {
+					cfg.MaxBatches = n
 				}
 			case "safety_margin":
 				if f, err := strconv.ParseFloat(val, 64); err == nil {

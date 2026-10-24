@@ -19,7 +19,7 @@ import (
 	"github.com/wbern/adrian/go/internal/reviewpolicy"
 )
 
-const Usage = "adrian plan --base <ref> --head <ref> --policy <trusted-base-ref> [--format json] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--fanout-threshold-bytes <bytes>] [--max-plan-bytes <bytes>] [--config <path>]"
+const Usage = "adrian plan --base <ref> --head <ref> --policy <trusted-base-ref> [--format json] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--max-batches <n>] [--fanout-threshold-bytes <bytes>] [--max-plan-bytes <bytes>] [--config <path>]"
 
 func Run(args []string, adrDir string, out io.Writer) error {
 	return RunCLI(args, filepath.Dir(filepath.Dir(adrDir)), out)
@@ -96,7 +96,7 @@ func parseArgs(args []string) (map[string]string, error) {
 		switch flag {
 		case "--base", "--head", "--policy", "--format",
 			"--budget-profile", "--budget-mode", "--max-batch-bytes",
-			"--max-batch-segments", "--fanout-threshold-bytes", "--fanout-threshold-segments", "--max-plan-bytes", "--config":
+			"--max-batch-segments", "--max-batches", "--fanout-threshold-bytes", "--fanout-threshold-segments", "--max-plan-bytes", "--config":
 		default:
 			return nil, fmt.Errorf("unknown argument %q; usage: %s", flag, Usage)
 		}

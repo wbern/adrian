@@ -29,3 +29,6 @@ CLAUDE.local.md
 .cursor/mcp.json
 opencode.json
 mimocode.json
+bin/
+.beads.gate.lock
+.gc/
