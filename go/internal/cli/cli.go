@@ -26,6 +26,7 @@ import (
 	"github.com/wbern/adrian/go/internal/dotenv"
 	"github.com/wbern/adrian/go/internal/finalizecmd"
 	"github.com/wbern/adrian/go/internal/gitcontext"
+	"github.com/wbern/adrian/go/internal/initcmd"
 	"github.com/wbern/adrian/go/internal/listcmd"
 	"github.com/wbern/adrian/go/internal/plancmd"
 	"github.com/wbern/adrian/go/internal/planexec"
@@ -43,6 +44,7 @@ import (
 )
 
 var subcommands = map[string]dispatcher.Command{
+	"init":      {Run: initcmd.Run, Usage: initcmd.Usage},
 	"create":    {Run: createcmd.Run, Usage: "adrian create <title>"},
 	"show":      {Run: showcmd.Run, Usage: "adrian show <id>"},
 	"accept":    {Run: acceptcmd.Run, Usage: "adrian accept <id>"},
