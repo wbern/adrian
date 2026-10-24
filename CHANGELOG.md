@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0](https://github.com/wbern/adrian/compare/v0.11.0...v0.12.0) (2026-10-24)
+
+
+### Features
+
+* **budget:** add cloud-economy profile and max-batches consolidation ([3da7738](https://github.com/wbern/adrian/commit/3da7738b23b85c3f06d7009f860707252901c20d))
+* **init:** add adrian init scaffolding for standalone repository onboarding ([16a72e7](https://github.com/wbern/adrian/commit/16a72e7594ed30fd2c7848c6771ad45266ce83b5))
+
 ## [0.11.0](https://github.com/wbern/adrian/compare/v0.10.1...v0.11.0) (2026-10-24)
 
 
