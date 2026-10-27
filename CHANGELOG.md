@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.1](https://github.com/wbern/adrian/compare/v0.13.0...v0.13.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **check:** preserve old-path ADR bindings across renames ([a889e9b](https://github.com/wbern/adrian/commit/a889e9bd1e461b575ecdb36875961beb6bc04d17))
+* **check:** preserve old-path ADR bindings across renames ([bb37c9b](https://github.com/wbern/adrian/commit/bb37c9b1b41948e276ae0521a8d1982cf05bed14))
+
 ## [0.13.0](https://github.com/wbern/adrian/compare/v0.12.1...v0.13.0) (2026-10-27)
 
 
