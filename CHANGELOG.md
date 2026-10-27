@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.0](https://github.com/wbern/adrian/compare/v0.12.1...v0.13.0) (2026-10-27)
+
+
+### Features
+
+* **resolve:** bind selected review scopes to immutable policy ([9110b87](https://github.com/wbern/adrian/commit/9110b87af590f338b69d03f6c62e90945c8762cd))
+* **resolve:** bind selected review scopes to immutable policy ([b711b4e](https://github.com/wbern/adrian/commit/b711b4e654ae3b7bc23f188fdb0f7ed1573c01a4))
+
 ## [0.12.1](https://github.com/wbern/adrian/compare/v0.12.0...v0.12.1) (2026-10-27)
 
 
