@@ -152,6 +152,7 @@ func TestSetAndGetCachedResult_RoundTrip(t *testing.T) {
 	}
 	if got == nil {
 		t.Fatal("expected result, got nil")
+		return
 	}
 	if !reflect.DeepEqual(*got, original) {
 		t.Errorf("round-trip mismatch:\nwant %+v\n got %+v", original, *got)

@@ -134,6 +134,7 @@ func TestCheckPreFilter_NoMatchReturnsSKIPPED(t *testing.T) {
 	got := CheckPreFilter(a, `+ import "github.com/stretchr/testify/assert";`)
 	if got == nil {
 		t.Fatal("expected non-nil result")
+		return
 	}
 	if got.Status != types.StatusSKIPPED {
 		t.Errorf("status = %q, want SKIPPED", got.Status)
@@ -160,6 +161,7 @@ func TestCheckPreFilter_ArrayPatternsNoMatch(t *testing.T) {
 	got := CheckPreFilter(a, "+ const x: string = 'hello';")
 	if got == nil {
 		t.Fatal("expected non-nil")
+		return
 	}
 	if got.Status != types.StatusSKIPPED {
 		t.Errorf("status = %q, want SKIPPED", got.Status)

@@ -20,6 +20,7 @@ import (
 	"github.com/wbern/adrian/go/internal/cache"
 	"github.com/wbern/adrian/go/internal/claudeclient"
 	"github.com/wbern/adrian/go/internal/cliparser"
+	"github.com/wbern/adrian/go/internal/corpus"
 	"github.com/wbern/adrian/go/internal/createcmd"
 	"github.com/wbern/adrian/go/internal/deprecatecmd"
 	"github.com/wbern/adrian/go/internal/dispatcher"
@@ -109,8 +110,7 @@ func Run(name string, args []string, out, errOut io.Writer) int {
 			return 0
 		}
 		git := gitcontext.NewDefaultClient()
-		adrDir := filepath.Join(git.GitRoot(), adr.DirName)
-		err := resolvecmd.Run(args[1:], adrDir, out, errOut)
+		err := resolvecmd.RunWithRoot(args[1:], "", git.GitRoot(), out, errOut)
 		if err != nil {
 			if errors.Is(err, resolvecmd.ErrSyntax) {
 				return 2
@@ -133,10 +133,24 @@ func Run(name string, args []string, out, errOut io.Writer) int {
 		return 0
 	}
 	git := gitcontext.NewDefaultClient()
-	adrDir := filepath.Join(git.GitRoot(), adr.DirName)
+	adrDir := ""
 	commands := map[string]dispatcher.Command{}
 	for key, command := range subcommands {
 		command.Usage = strings.ReplaceAll(command.Usage, "adrian", name)
+		original := command.Run
+		command.Run = func(a []string, _ string, w io.Writer) error {
+			if key == "version" {
+				return original(a, "", w)
+			}
+			if key == "init" {
+				return initcmd.RunWithRoot(a, "", git.GitRoot(), w)
+			}
+			dir, e := corpus.Discover(git.GitRoot(), key == "create")
+			if e != nil {
+				return e
+			}
+			return original(a, dir, w)
+		}
 		commands[key] = command
 	}
 	commands["check"] = dispatcher.Command{Usage: name + " check [--branch <ref>] [--files <path...>] [--diff <path>] [--format text|json|markdown]"}

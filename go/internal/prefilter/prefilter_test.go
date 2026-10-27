@@ -128,6 +128,7 @@ func TestCheck(t *testing.T) {
 	res2 := Check(a, unrelatedDiff)
 	if res2 == nil {
 		t.Fatalf("expected Check to return SKIPPED for unrelated diff, got nil")
+		return
 	}
 	if res2.Status != types.StatusSKIPPED {
 		t.Errorf("status = %v, want SKIPPED", res2.Status)

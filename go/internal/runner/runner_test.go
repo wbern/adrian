@@ -301,6 +301,7 @@ func TestGenerateMarkdownReport_DetailsIncludeLocationsFilesAndFix(t *testing.T)
 
 func TestRun_NoStagedFiles(t *testing.T) {
 	gitRoot := t.TempDir()
+	writeADR(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Rule", "lite", "pkg/**")
 	git := fakeGit(gitRoot, map[string]string{"diff --cached --name-only": ""})
 	var buf bytes.Buffer
 	code, err := Run(types.LintOptions{Provider: types.ProviderClaude}, RunDeps{
@@ -319,6 +320,7 @@ func TestRun_NoStagedFiles(t *testing.T) {
 
 func TestRun_BranchModeNoChangedFiles(t *testing.T) {
 	gitRoot := t.TempDir()
+	writeADR(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Rule", "lite", "pkg/**")
 	git := fakeGit(gitRoot, map[string]string{
 		"merge-base HEAD main":          "abc123\n",
 		"diff --name-only abc123..HEAD": "",

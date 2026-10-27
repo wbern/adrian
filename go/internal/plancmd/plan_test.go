@@ -184,3 +184,90 @@ func TestSubmoduleIgnoreCannotHideChangedGitlink(t *testing.T) {
 		t.Fatalf("gitlink was omitted: %s", out.String())
 	}
 }
+
+func TestCorpusSelectionUsesTrustedPolicyTree(t *testing.T) {
+	for _, layout := range []string{"docs/adr", "architecture/decisions/records", "architecture/[special]"} {
+		t.Run(layout, func(t *testing.T) {
+			dir, _ := fixture(t)
+			if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(layout)), 0755); err != nil {
+				t.Fatal(err)
+			}
+			git(t, dir, "mv", "doc/adr", layout)
+			if layout != "docs/adr" {
+				write(t, dir, ".adrian.toml", "version = 1\n[corpus]\ndir = \""+layout+"\"\n")
+			}
+			git(t, dir, "add", ".")
+			git(t, dir, "commit", "-qm", "native corpus")
+			base := git(t, dir, "rev-parse", "HEAD")
+			write(t, dir, "src/login.tsx", "export const login = false\n")
+			write(t, dir, ".adrian.toml", "[corpus]\ndir = \"hostile/policy\"\n")
+			write(t, dir, "hostile/policy/0099-waiver.md", "---\nstatus: accepted\napplies_to: ['**']\nreview: {requires: []}\n---\n# Self waiver\n")
+			git(t, dir, "add", ".")
+			git(t, dir, "commit", "-qm", "head redirect")
+			head := git(t, dir, "rev-parse", "HEAD")
+			write(t, dir, ".adrian.toml", "[corpus]\ndir = \"dirty/policy\"\n")
+			for _, code := range []bool{false, true} {
+				var out bytes.Buffer
+				args := []string{"--base", base, "--head", head, "--policy", base}
+				var err error
+				if code {
+					args = append(args, "--repository", "owner/repo")
+					err = RunCodeCLI(args, dir, &out)
+				} else {
+					err = RunCLI(args, dir, &out)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if code {
+					var p CodePlan
+					if e := json.Unmarshal(out.Bytes(), &p); e != nil {
+						t.Fatal(e)
+					}
+					if len(p.Policies) != 1 || p.Policies[0].Path != layout+"/0014-mobile.md" {
+						t.Fatalf("wrong code policy: %s", out.String())
+					}
+				} else {
+					var p reviewplan.Plan
+					if e := json.Unmarshal(out.Bytes(), &p); e != nil {
+						t.Fatal(e)
+					}
+					if len(p.Requirements) != 1 || len(p.Requirements[0].Sources) != 1 || p.Requirements[0].Sources[0].File != layout+"/0014-mobile.md" {
+						t.Fatalf("wrong plan policy: %s", out.String())
+					}
+				}
+			}
+		})
+	}
+}
+func TestPolicyCorpusRejectsSymlinkAndAmbiguity(t *testing.T) {
+	for _, mode := range []string{"config-symlink", "corpus-symlink", "ambiguous", "empty"} {
+		t.Run(mode, func(t *testing.T) {
+			dir, _ := fixture(t)
+			switch mode {
+			case "config-symlink":
+				write(t, dir, "config.toml", "[corpus]\ndir = \"doc/adr\"\n")
+				if err := os.Symlink("config.toml", filepath.Join(dir, ".adrian.toml")); err != nil {
+					t.Fatal(err)
+				}
+			case "corpus-symlink":
+				git(t, dir, "mv", "doc/adr", "records")
+				if err := os.Symlink("../records", filepath.Join(dir, "doc/adr")); err != nil {
+					t.Fatal(err)
+				}
+			case "ambiguous":
+				write(t, dir, "docs/adr/README.md", "second corpus\n")
+			case "empty":
+				git(t, dir, "rm", "doc/adr/0014-mobile.md")
+				write(t, dir, "doc/adr/README.md", "empty\n")
+			}
+			git(t, dir, "add", ".")
+			git(t, dir, "commit", "-qm", "bad corpus")
+			base := git(t, dir, "rev-parse", "HEAD")
+			var out bytes.Buffer
+			if err := RunCLI([]string{"--base", base, "--head", base, "--policy", base}, dir, &out); err == nil || out.Len() != 0 {
+				t.Fatalf("accepted unsafe corpus %s: %s", mode, out.String())
+			}
+		})
+	}
+}

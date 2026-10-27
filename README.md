@@ -452,3 +452,26 @@ CLI scaffold.
 Working on adrian itself? See [CONTRIBUTING.md](CONTRIBUTING.md) for
 local setup (lefthook, golangci-lint, gitleaks), commit message rules,
 and how this repo dogfoods its own linter.
+
+### ADR corpus directory
+
+All commands use one repository-owned corpus. ADRian automatically discovers
+`doc/adr` or `docs/adr`. If both exist, select one explicitly in `.adrian.toml`:
+
+```toml
+[corpus]
+dir = "docs/adr"
+```
+
+Custom repository-relative paths are supported. Paths must use canonical forward
+slashes, stay inside the repository, and contain no symlink components. `init --docs-dir <path>` records the selection while preserving existing configuration
+and numbered ADRs. `create` can bootstrap an absent corpus. Other corpus consumers
+fail when the selected directory is absent or contains no numbered ADRs, even
+when the change set is empty. A corpus with no rules applicable to a particular
+change remains a successful no-op.
+
+`plan` and `code-plan` read corpus configuration and ADRs from the trusted
+`--policy` commit. Changes in the working tree or proposed head cannot redirect
+that policy. This selection does not change existing plan output or fingerprints
+for repositories using only `doc/adr`. The `adr-lint` compatibility command uses
+the same discovery rules.
