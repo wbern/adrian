@@ -118,6 +118,13 @@ adrian review --branch main --agent-cmd "python3 scripts/agent_evaluator.py"
 git diff main...HEAD | adrian review --diff -
 ```
 
+Staged, branch and supplied-diff checks bind ADRs against both endpoints of a
+rename. An old-path rule receives the whole actual rename section, including its
+newly added code. Branch `--files` selection also accepts the old path after it
+has disappeared from disk. Malformed change inventories and failed diff reads
+stop the check instead of reporting that no rules applied.
+
+
 ### Migrating from adr-lint
 
 `adrian` is the canonical command. The deprecated `adr-lint` binary remains

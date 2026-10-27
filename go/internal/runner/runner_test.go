@@ -302,7 +302,7 @@ func TestGenerateMarkdownReport_DetailsIncludeLocationsFilesAndFix(t *testing.T)
 func TestRun_NoStagedFiles(t *testing.T) {
 	gitRoot := t.TempDir()
 	writeADR(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Rule", "lite", "pkg/**")
-	git := fakeGit(gitRoot, map[string]string{"diff --cached --name-only": ""})
+	git := fakeGit(gitRoot, map[string]string{"diff --cached --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames": ""})
 	var buf bytes.Buffer
 	code, err := Run(types.LintOptions{Provider: types.ProviderClaude}, RunDeps{
 		Out: &buf, Err: &buf, Git: git,
@@ -322,8 +322,8 @@ func TestRun_BranchModeNoChangedFiles(t *testing.T) {
 	gitRoot := t.TempDir()
 	writeADR(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Rule", "lite", "pkg/**")
 	git := fakeGit(gitRoot, map[string]string{
-		"merge-base HEAD main":          "abc123\n",
-		"diff --name-only abc123..HEAD": "",
+		"merge-base HEAD main": "abc123\n",
+		"diff --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames abc123..HEAD": "",
 	})
 	var buf bytes.Buffer
 	code, err := Run(types.LintOptions{Provider: types.ProviderClaude, BranchSet: true},
@@ -370,7 +370,7 @@ func TestRun_DryRunSkipsLintInvocation(t *testing.T) {
 	gitRoot := t.TempDir()
 	writeADR(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Always", "lite", "pkg/**/*.go")
 	git := fakeGit(gitRoot, map[string]string{
-		"diff --cached --name-only": "pkg/foo.go\n",
+		"diff --cached --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames": "M\x00pkg/foo.go\x00",
 	})
 
 	lintCalled := false
@@ -404,7 +404,7 @@ func TestRun_NoADRsApplicable(t *testing.T) {
 	gitRoot := t.TempDir()
 	writeADR(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Frontend", "lite", "frontend/**/*.vue")
 	git := fakeGit(gitRoot, map[string]string{
-		"diff --cached --name-only": "backend/server.go\n",
+		"diff --cached --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames": "M\x00backend/server.go\x00",
 	})
 	var buf bytes.Buffer
 	code, err := Run(types.LintOptions{Provider: types.ProviderClaude},
@@ -424,8 +424,8 @@ func TestRun_FailingResultProducesExitCode1(t *testing.T) {
 	gitRoot := t.TempDir()
 	writeADR(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Catchall", "lite", "**/*.go")
 	git := fakeGit(gitRoot, map[string]string{
-		"diff --cached --name-only": "pkg/foo.go\n",
-		"diff --cached -U0 -- pkg/foo.go": "diff --git a/pkg/foo.go b/pkg/foo.go\n" +
+		"diff --cached --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames": "M\x00pkg/foo.go\x00",
+		"diff --cached -U0 --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --find-renames -- :(literal)pkg/foo.go": "diff --git a/pkg/foo.go b/pkg/foo.go\n" +
 			"index e69de29..d670460 100644\n--- a/pkg/foo.go\n+++ b/pkg/foo.go\n" +
 			"@@ -0,0 +1,1 @@\n+const x: any = 5;\n",
 	})
@@ -456,7 +456,7 @@ func TestRun_ADRsFilterMessageWhenNoneMatch(t *testing.T) {
 	gitRoot := t.TempDir()
 	writeADR(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Catchall", "lite", "**/*.go")
 	git := fakeGit(gitRoot, map[string]string{
-		"diff --cached --name-only": "pkg/foo.go\n",
+		"diff --cached --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames": "M\x00pkg/foo.go\x00",
 	})
 	var buf bytes.Buffer
 	code, err := Run(types.LintOptions{Provider: types.ProviderClaude, ADRs: []string{"9999"}},
@@ -642,8 +642,8 @@ func TestRun_VerboseLogsCacheHitOnSecondInvocation(t *testing.T) {
 	gitRoot := t.TempDir()
 	writeADR(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Catchall", "lite", "**/*.go")
 	git := fakeGit(gitRoot, map[string]string{
-		"diff --cached --name-only": "pkg/foo.go\n",
-		"diff --cached -U0 -- pkg/foo.go": "diff --git a/pkg/foo.go b/pkg/foo.go\n" +
+		"diff --cached --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames": "M\x00pkg/foo.go\x00",
+		"diff --cached -U0 --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --find-renames -- :(literal)pkg/foo.go": "diff --git a/pkg/foo.go b/pkg/foo.go\n" +
 			"index e69de29..d670460 100644\n--- a/pkg/foo.go\n+++ b/pkg/foo.go\n" +
 			"@@ -0,0 +1,1 @@\n+const x: any = 5;\n",
 	})
@@ -686,7 +686,7 @@ func TestRun_UnregisteredProviderReturnsError(t *testing.T) {
 	gitRoot := t.TempDir()
 	writeADR(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Always", "lite", "pkg/**/*.go")
 	git := fakeGit(gitRoot, map[string]string{
-		"diff --cached --name-only": "pkg/foo.go\n",
+		"diff --cached --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames": "M\x00pkg/foo.go\x00",
 	})
 	var buf bytes.Buffer
 	unknown := types.Provider("unknown-provider")
@@ -719,8 +719,8 @@ func TestRun_PerFileSplitsAndAggregatesChunks(t *testing.T) {
 		"index e69de29..d670460 100644\n--- a/pkg/b.go\n+++ b/pkg/b.go\n" +
 		"@@ -0,0 +1,1 @@\n+const b = 2;\n"
 	git := fakeGit(gitRoot, map[string]string{
-		"diff --cached --name-only":              "pkg/a.go\npkg/b.go\n",
-		"diff --cached -U0 -- pkg/a.go pkg/b.go": diff,
+		"diff --cached --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames":                             "M\x00pkg/a.go\x00M\x00pkg/b.go\x00",
+		"diff --cached -U0 --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --find-renames -- :(literal)pkg/a.go :(literal)pkg/b.go": diff,
 	})
 
 	var mu sync.Mutex
@@ -802,9 +802,9 @@ func TestRun_BranchModeInvokesLintWithBranchDiff(t *testing.T) {
 		"index e69de29..d670460 100644\n--- a/pkg/foo.go\n+++ b/pkg/foo.go\n" +
 		"@@ -0,0 +1,1 @@\n+const x = 5;\n"
 	git := fakeGit(gitRoot, map[string]string{
-		"merge-base HEAD main":                "abc123\n",
-		"diff --name-only abc123..HEAD":       "pkg/foo.go\n",
-		"diff -U0 abc123..HEAD -- pkg/foo.go": diff,
+		"merge-base HEAD main": "abc123\n",
+		"diff --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames abc123..HEAD":            "M\x00pkg/foo.go\x00",
+		"diff -U0 --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --find-renames abc123..HEAD -- :(literal)pkg/foo.go": diff,
 	})
 
 	var receivedDiff string
@@ -834,8 +834,8 @@ func TestRun_PreFilterSkipsLintFn(t *testing.T) {
 	gitRoot := t.TempDir()
 	writeADRWithPreFilter(t, filepath.Join(gitRoot, "doc/adr"), "0001", "NoPrintln", "lite", "**/*.go", "fmt.Println")
 	git := fakeGit(gitRoot, map[string]string{
-		"diff --cached --name-only": "pkg/foo.go\n",
-		"diff --cached -U0 -- pkg/foo.go": "diff --git a/pkg/foo.go b/pkg/foo.go\n" +
+		"diff --cached --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames": "M\x00pkg/foo.go\x00",
+		"diff --cached -U0 --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --find-renames -- :(literal)pkg/foo.go": "diff --git a/pkg/foo.go b/pkg/foo.go\n" +
 			"index e69de29..d670460 100644\n--- a/pkg/foo.go\n+++ b/pkg/foo.go\n" +
 			"@@ -0,0 +1,1 @@\n+greeting := \"hi\"\n",
 	})
@@ -869,8 +869,8 @@ func TestRun_CIWritesArtifacts(t *testing.T) {
 	gitRoot := t.TempDir()
 	writeADR(t, filepath.Join(gitRoot, "doc/adr"), "0001", "Catchall", "lite", "**/*.go")
 	git := fakeGit(gitRoot, map[string]string{
-		"diff --cached --name-only": "pkg/foo.go\n",
-		"diff --cached -U0 -- pkg/foo.go": "diff --git a/pkg/foo.go b/pkg/foo.go\n" +
+		"diff --cached --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --name-status -z --find-renames": "M\x00pkg/foo.go\x00",
+		"diff --cached -U0 --no-relative --no-color --no-ext-diff --no-textconv --ignore-submodules=none --find-renames -- :(literal)pkg/foo.go": "diff --git a/pkg/foo.go b/pkg/foo.go\n" +
 			"index e69de29..d670460 100644\n--- a/pkg/foo.go\n+++ b/pkg/foo.go\n" +
 			"@@ -0,0 +1,1 @@\n+const x = 5;\n",
 	})

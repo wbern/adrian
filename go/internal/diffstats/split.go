@@ -30,8 +30,8 @@ type FileDiff struct {
 //
 // A delete has `+++ /dev/null`, and an add has `--- /dev/null`; both fall back
 // to the side that exists, so a deleted file still matches its ADRs. A rename
-// reports the destination as NewPath, because applies_to should match where the
-// code lands.
+// retains both endpoints so applies_to can bind the path being left as well as
+// the destination.
 //
 // Anything before the first `diff --git` header is dropped. If a header's paths
 // cannot be resolved at all, the section is still returned with empty paths so
