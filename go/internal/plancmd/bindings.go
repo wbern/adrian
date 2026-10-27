@@ -14,10 +14,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/wbern/adrian/go/internal/reviewplan"
+	"github.com/wbern/adrian/go/internal/reviewpolicy"
 )
 
-const BindingsUsage = "adrian resolve --repository <owner/name|local:stable-id> --base <ref> --head <ref> --policy <trusted-base-ref> --paths0 --format bindings-json"
+const BindingsUsage = "adrian resolve --repository <owner/name|local:stable-id> --base <ref> --head <ref> --policy <trusted-base-ref> --paths0 --format bindings-json | --format bindings-json-v2 --tag <name>"
 const BindingsSchema = "adrian-bindings-v1"
+const TaggedBindingsSchema = "adrian-bindings-v2"
 const maxBindingsScopeBytes = 4 * 1024 * 1024
 const maxBindingsScopePaths = 65536
 
@@ -33,6 +35,13 @@ type PolicyBinding struct {
 	Status  string         `json:"status"`
 	Matches []BindingScope `json:"matches"`
 }
+
+// BindingSelection identifies the native metadata filter; it is not a waiver.
+type BindingSelection struct {
+	Kind string `json:"kind"`
+	Tag  string `json:"tag"`
+}
+
 type SelectedScope struct {
 	Kind   string   `json:"kind"`
 	Paths  []string `json:"paths"`
@@ -50,6 +59,7 @@ type BindingsPlan struct {
 	Changes        []reviewplan.Change         `json:"changes"`
 	ManifestDigest string                      `json:"manifest_digest"`
 	Scope          SelectedScope               `json:"scope"`
+	Selection      *BindingSelection           `json:"selection,omitempty"`
 	PolicyManifest []reviewplan.PolicyIdentity `json:"policy_manifest"`
 	RegistryDigest string                      `json:"registry_digest"`
 	Accepted       []PolicyBinding             `json:"accepted"`
@@ -65,10 +75,10 @@ func IsBindingsMode(args []string) bool {
 		case "--repository", "--head", "--policy", "--paths0":
 			return true
 		}
-		if arg == "--format" && i+1 < len(args) && args[i+1] == "bindings-json" {
+		if arg == "--format" && i+1 < len(args) && (args[i+1] == "bindings-json" || args[i+1] == "bindings-json-v2") {
 			return true
 		}
-		if arg == "--format=bindings-json" {
+		if arg == "--format=bindings-json" || arg == "--format=bindings-json-v2" {
 			return true
 		}
 	}
@@ -98,7 +108,7 @@ func parseBindingsArgs(args []string) (map[string]string, error) {
 		switch key {
 		case "--paths0":
 			values[key] = "true"
-		case "--repository", "--base", "--head", "--policy", "--format":
+		case "--repository", "--base", "--head", "--policy", "--format", "--tag":
 			i++
 			if i >= len(args) || args[i] == "" || strings.HasPrefix(args[i], "-") {
 				return nil, fmt.Errorf("%s requires a value", key)
@@ -113,8 +123,18 @@ func parseBindingsArgs(args []string) (map[string]string, error) {
 			return nil, fmt.Errorf("%s is required; usage: %s", key, BindingsUsage)
 		}
 	}
-	if values["--format"] != "bindings-json" {
-		return nil, fmt.Errorf("immutable bindings require --format bindings-json")
+	switch values["--format"] {
+	case "bindings-json":
+		if _, present := values["--tag"]; present {
+			return nil, fmt.Errorf("--tag requires --format bindings-json-v2")
+		}
+	case "bindings-json-v2":
+		tag, e := reviewpolicy.NormalizeTag(values["--tag"])
+		if e != nil || tag != values["--tag"] {
+			return nil, fmt.Errorf("bindings-json-v2 requires one canonical nonempty --tag")
+		}
+	default:
+		return nil, fmt.Errorf("immutable bindings require --format bindings-json or bindings-json-v2")
 	}
 	if bindingRepositoryKind(values["--repository"]) == "" {
 		return nil, fmt.Errorf("invalid repository identity; expected owner/name or local:<lowercase-stable-id> (1-128 characters)")
@@ -224,7 +244,23 @@ func RunBindingsCLI(args []string, dir string, in io.Reader, out io.Writer) erro
 	if err != nil {
 		return err
 	}
+	tagsByFile := map[string][]string{}
+	if opts["--format"] == "bindings-json-v2" {
+		// Validate ALL committed policies, including retired and unmatched records,
+		// before filtering any applicability or authority class.
+		for _, policy := range policies {
+			tags, e := reviewpolicy.ParseTags(bodies[policy.File])
+			if e != nil {
+				return fmt.Errorf("%s: invalid tags: %w", policy.File, e)
+			}
+			tagsByFile[policy.File] = tags
+		}
+	}
 	p := BindingsPlan{Schema: BindingsSchema, Repository: opts["--repository"], RepositoryKind: bindingRepositoryKind(opts["--repository"]), Provenance: reviewplan.Provenance{BaseCommit: base, MergeBase: mergeBase, HeadCommit: head, PolicyCommit: policy}, Changes: changes, Scope: SelectedScope{Kind: "caller-selected-paths", Paths: paths}, PolicyManifest: []reviewplan.PolicyIdentity{}, Accepted: []PolicyBinding{}, Proposed: []PolicyBinding{}}
+	if opts["--format"] == "bindings-json-v2" {
+		p.Schema = TaggedBindingsSchema
+		p.Selection = &BindingSelection{Kind: "tag", Tag: opts["--tag"]}
+	}
 	p.Scope.Digest, err = bindingsDigest(paths)
 	if err != nil {
 		return err
@@ -241,6 +277,18 @@ func RunBindingsCLI(args []string, dir string, in io.Reader, out io.Writer) erro
 		p.PolicyManifest = append(p.PolicyManifest, reviewplan.PolicyIdentity{ADR: a.ID, File: a.File, Status: a.Status, Digest: a.PolicyDigest})
 		if a.Status != "accepted" && a.Status != "proposed" {
 			continue
+		}
+		if p.Selection != nil {
+			selected := false
+			for _, tag := range tagsByFile[a.File] {
+				if tag == p.Selection.Tag {
+					selected = true
+					break
+				}
+			}
+			if !selected {
+				continue
+			}
 		}
 		binding := PolicyBinding{PolicyRecord: PolicyRecord{ADR: a.ID, Path: a.File, Content: string(bodies[a.File]), SHA256: a.PolicyDigest}, Status: a.Status, Matches: []BindingScope{}}
 		for index, scope := range a.Scopes {
