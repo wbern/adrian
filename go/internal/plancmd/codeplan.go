@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/wbern/adrian/go/internal/adr"
 	"github.com/wbern/adrian/go/internal/budget"
+	"github.com/wbern/adrian/go/internal/corpus"
 	"github.com/wbern/adrian/go/internal/reviewpacket"
 	"github.com/wbern/adrian/go/internal/reviewplan"
 	"github.com/wbern/adrian/go/internal/sharedpacket"
@@ -63,7 +63,7 @@ type PolicyRecord struct {
 }
 
 func RunCode(args []string, adrDir string, out io.Writer) error {
-	return RunCodeCLI(args, filepath.Dir(filepath.Dir(adrDir)), out)
+	return RunCodeCLI(args, corpus.RepositoryRoot(adrDir), out)
 }
 
 func RunCodeCLI(args []string, dir string, out io.Writer) error {

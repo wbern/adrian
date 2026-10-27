@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wbern/adrian/go/internal/corpus"
 	"github.com/wbern/adrian/go/internal/gitcontext"
 )
 
@@ -41,15 +42,44 @@ func RunWithRoot(args []string, adrDir, repoRoot string, out io.Writer) error {
 	}
 
 	targetDocsDir := opts.DocsDir
-	if targetDocsDir == "" {
-		// Prefer existing docs/adr if present, otherwise default to doc/adr
-		if fi, err := os.Stat(filepath.Join(repoRoot, "docs", "adr")); err == nil && fi.IsDir() {
-			targetDocsDir = filepath.Join("docs", "adr")
-		} else {
-			targetDocsDir = filepath.Join("doc", "adr")
+	if targetDocsDir != "" {
+		if err := corpus.ValidatePath(targetDocsDir); err != nil {
+			return err
 		}
 	}
-	absDocsDir := filepath.Join(repoRoot, targetDocsDir)
+	// Discover before writing; explicit selection may resolve two conventional directories.
+	if err := corpus.NoSymlinks(repoRoot, corpus.ConfigPath); err != nil {
+		return err
+	}
+	existingConfig, configErr := os.ReadFile(filepath.Join(repoRoot, corpus.ConfigPath))
+	if configErr != nil && !os.IsNotExist(configErr) {
+		return configErr
+	}
+	configured := ""
+	if configErr == nil {
+		configured, err = corpus.ConfigDir(existingConfig)
+		if err != nil {
+			return err
+		}
+	}
+	if targetDocsDir != "" && configured != "" && targetDocsDir != configured {
+		return fmt.Errorf("corpus dir conflicts with existing configuration")
+	}
+	if targetDocsDir == "" {
+		discovered, e := corpus.Discover(repoRoot, true)
+		if e != nil {
+			return e
+		}
+		targetDocsDir, e = filepath.Rel(repoRoot, discovered)
+		if e != nil {
+			return e
+		}
+		targetDocsDir = filepath.ToSlash(targetDocsDir)
+	}
+	if err := corpus.NoSymlinks(repoRoot, targetDocsDir); err != nil {
+		return err
+	}
+	absDocsDir := filepath.Join(repoRoot, filepath.FromSlash(targetDocsDir))
 
 	var createdFiles []string
 
@@ -60,7 +90,24 @@ func RunWithRoot(args []string, adrDir, repoRoot string, out io.Writer) error {
 
 	// 2. Scaffold 0001-record-architecture-decisions.md
 	adr1Path := filepath.Join(absDocsDir, "0001-record-architecture-decisions.md")
-	if shouldWrite(adr1Path, opts.Force) {
+	existingEntries, err := os.ReadDir(absDocsDir)
+	if err != nil {
+		return err
+	}
+	hasRecords := false
+	for _, entry := range existingEntries {
+		if corpus.Numbered.MatchString(entry.Name()) {
+			hasRecords = true
+			info, e := entry.Info()
+			if e != nil {
+				return e
+			}
+			if !info.Mode().IsRegular() {
+				return fmt.Errorf("ADR corpus record %s must be a regular file", entry.Name())
+			}
+		}
+	}
+	if !hasRecords {
 		today := time.Now().UTC().Format("2006-01-02")
 		adrContent := fmt.Sprintf(`---
 status: accepted
@@ -93,11 +140,14 @@ See Michael Nygard's article, linked above.
 
 	// 3. Scaffold .adrian.toml
 	configPath := filepath.Join(repoRoot, ".adrian.toml")
-	if shouldWrite(configPath, opts.Force) {
-		configContent := `# ADRian Configuration
+	if configErr != nil {
+		configContent := fmt.Sprintf(`# ADRian Configuration
 # See: https://github.com/wbern/adrian
 
 version = 1
+
+[corpus]
+dir = %q
 
 [budget]
 mode = "auto"
@@ -108,11 +158,19 @@ batch_max_bytes = 200000
 batch_max_segments = 4
 max_batches = 32
 safety_margin = 0.20
-`
+`, targetDocsDir)
 		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 			return fmt.Errorf("failed to create %s: %w", configPath, err)
 		}
 		createdFiles = append(createdFiles, ".adrian.toml")
+	}
+
+	if configErr == nil && configured == "" {
+		// Appending a new table preserves every existing budget and unrelated setting.
+		updated := append(existingConfig, []byte(fmt.Sprintf("\n[corpus]\ndir = %q\n", targetDocsDir))...)
+		if err := os.WriteFile(configPath, updated, 0644); err != nil {
+			return err
+		}
 	}
 
 	// 4. Scaffold .adrian/weights.json

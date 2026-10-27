@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/wbern/adrian/go/internal/corpus"
 	"github.com/wbern/adrian/go/internal/reviewplan"
 	"github.com/wbern/adrian/go/internal/reviewpolicy"
 )
@@ -22,7 +23,7 @@ import (
 const Usage = "adrian plan --base <ref> --head <ref> --policy <trusted-base-ref> [--format json] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--max-batches <n>] [--fanout-threshold-bytes <bytes>] [--max-plan-bytes <bytes>] [--config <path>]"
 
 func Run(args []string, adrDir string, out io.Writer) error {
-	return RunCLI(args, filepath.Dir(filepath.Dir(adrDir)), out)
+	return RunCLI(args, corpus.RepositoryRoot(adrDir), out)
 }
 
 func RunCLI(args []string, dir string, out io.Writer) error {
@@ -151,7 +152,57 @@ func (g gitReader) commit(ref string) (string, error) {
 
 func (g gitReader) readPolicy(commit string) (reviewpolicy.Registry, []reviewpolicy.ADR, error) {
 	var registry reviewpolicy.Registry
-	raw, err := g.run("ls-tree", "-r", "-z", "--full-tree", commit, "--", "doc/adr", reviewpolicy.RegistryPath)
+	// Configuration is policy: read it from the trusted commit, never the checkout.
+	configTree, err := g.run("ls-tree", "-z", "--full-tree", commit, "--", ":(literal)"+corpus.ConfigPath)
+	if err != nil {
+		return registry, nil, err
+	}
+	configured := ""
+	if len(configTree) > 0 {
+		header, _, ok := strings.Cut(strings.TrimSuffix(string(configTree), "\x00"), "\t")
+		parts := strings.Fields(header)
+		if !ok || len(parts) != 3 || (parts[0] != "100644" && parts[0] != "100755") || parts[1] != "blob" || !commitID.MatchString(parts[2]) {
+			return registry, nil, fmt.Errorf("corpus configuration must be a regular Git blob")
+		}
+		config, e := g.run("cat-file", "blob", parts[2])
+		if e != nil {
+			return registry, nil, e
+		}
+		configured, e = corpus.ConfigDir(config)
+		if e != nil {
+			return registry, nil, e
+		}
+	}
+	exists := func(p string) (bool, error) {
+		raw, e := g.run("ls-tree", "-z", "--full-tree", commit, "--", ":(literal)"+p)
+		if e != nil {
+			return false, e
+		}
+		if len(raw) == 0 {
+			return false, nil
+		}
+		fields := strings.Fields(strings.SplitN(string(raw), "\t", 2)[0])
+		if len(fields) != 3 || fields[0] != "040000" || fields[1] != "tree" {
+			return false, fmt.Errorf("corpus %s must be a Git tree", p)
+		}
+		return true, nil
+	}
+	selected, err := corpus.Select(configured, exists)
+	if err != nil {
+		return registry, nil, err
+	}
+	// Check every ancestor explicitly, rejecting symlinks even for custom paths.
+	components := strings.Split(selected, "/")
+	for i := range components {
+		ok, e := exists(strings.Join(components[:i+1], "/"))
+		if e != nil {
+			return registry, nil, e
+		}
+		if !ok {
+			return registry, nil, fmt.Errorf("ADR corpus %s missing in policy commit", selected)
+		}
+	}
+	raw, err := g.run("ls-tree", "-r", "-z", "--full-tree", commit, "--", ":(literal)"+selected, ":(literal)"+reviewpolicy.RegistryPath)
 	if err != nil {
 		return registry, nil, err
 	}
@@ -170,7 +221,7 @@ func (g gitReader) readPolicy(commit string) (reviewpolicy.Registry, []reviewpol
 		if len(parts) != 3 {
 			return registry, nil, fmt.Errorf("malformed policy tree header")
 		}
-		if file != reviewpolicy.RegistryPath && !reviewpolicy.IsADRPath(file) {
+		if file != reviewpolicy.RegistryPath && !(filepath.ToSlash(filepath.Dir(file)) == selected && corpus.Numbered.MatchString(filepath.Base(file))) {
 			continue
 		}
 		if (parts[0] != "100644" && parts[0] != "100755") || parts[1] != "blob" || !commitID.MatchString(parts[2]) {

@@ -6,3 +6,5 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+require github.com/pelletier/go-toml/v2 v2.2.4

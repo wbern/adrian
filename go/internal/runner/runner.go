@@ -18,6 +18,7 @@ import (
 
 	"github.com/wbern/adrian/go/internal/adr"
 	"github.com/wbern/adrian/go/internal/cache"
+	"github.com/wbern/adrian/go/internal/corpus"
 	"github.com/wbern/adrian/go/internal/diffchunker"
 	"github.com/wbern/adrian/go/internal/diffstats"
 	"github.com/wbern/adrian/go/internal/filefilter"
@@ -101,7 +102,10 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 	}
 
 	gitRoot := deps.Git.GitRoot()
-	adrDir := filepath.Join(gitRoot, adr.DirName)
+	adrDir, corpusErr := corpus.Discover(gitRoot, false)
+	if corpusErr != nil {
+		return 1, corpusErr
+	}
 
 	// In --diff mode the diff is read once, up front, and its own file headers
 	// become the changed-file list. git is never asked about the diff — the
@@ -150,6 +154,14 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 	adrs, err := adr.ParseADRs(adrDir)
 	if err != nil {
 		return 1, err
+	}
+
+	for i := range adrs {
+		relative, e := filepath.Rel(gitRoot, adrs[i].FilePath)
+		if e != nil {
+			return 1, e
+		}
+		adrs[i].FilePath = filepath.ToSlash(relative)
 	}
 
 	if len(adrs) == 0 {
@@ -739,7 +751,7 @@ func GenerateMarkdownReport(results []types.LintResult) string {
 	totalTokens := 0
 	for _, r := range sorted {
 		icon := formatter.StatusIcons[r.Status]
-		adrFile := filepath.Base(r.ADR.FilePath)
+		adrFile := filepath.ToSlash(r.ADR.FilePath)
 		explanation := strings.ReplaceAll(r.Explanation, "\n", " ")
 		explanation = strings.ReplaceAll(explanation, "|", `\|`)
 		if len(explanation) > ExplanationTruncateLength {
@@ -751,7 +763,7 @@ func GenerateMarkdownReport(results []types.LintResult) string {
 			totalTokens += r.TokenUsage.TotalTokens
 		}
 		lines = append(lines, fmt.Sprintf(
-			"| %s | [%s. %s](doc/adr/%s) | %s | %s |",
+			"| %s | [%s. %s](%s) | %s | %s |",
 			icon, r.ADR.ID, r.ADR.Title, adrFile, explanation, tokens,
 		))
 	}
@@ -804,7 +816,7 @@ func GenerateMarkdownReport(results []types.LintResult) string {
 func renderResultDetails(results []types.LintResult, lines *[]string) {
 	for _, r := range results {
 		icon := formatter.StatusIcons[r.Status]
-		adrFile := filepath.Base(r.ADR.FilePath)
+		adrFile := filepath.ToSlash(r.ADR.FilePath)
 		*lines = append(*lines, "<details>")
 		*lines = append(*lines, fmt.Sprintf("<summary>%s <strong>ADR %s: %s</strong></summary>\n", icon, r.ADR.ID, r.ADR.Title))
 		if len(r.Locations) > 0 {
@@ -829,7 +841,7 @@ func renderResultDetails(results []types.LintResult, lines *[]string) {
 		if r.Suggestion != nil && *r.Suggestion != "" {
 			*lines = append(*lines, fmt.Sprintf("**Suggested fix:** %s\n", *r.Suggestion))
 		}
-		*lines = append(*lines, fmt.Sprintf("[View ADR](doc/adr/%s)\n", adrFile))
+		*lines = append(*lines, fmt.Sprintf("[View ADR](%s)\n", adrFile))
 		*lines = append(*lines, "</details>\n")
 	}
 }

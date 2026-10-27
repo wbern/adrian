@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/wbern/adrian/go/internal/adr"
+	"github.com/wbern/adrian/go/internal/corpus"
 	"github.com/wbern/adrian/go/internal/patternmatcher"
 )
 
@@ -19,6 +20,10 @@ var ErrSyntax = errors.New("syntax error")
 
 // Run parses CLI options and resolves ADRs for changed or given files.
 func Run(args []string, adrDir string, out io.Writer, errOut io.Writer) error {
+	return RunWithRoot(args, adrDir, corpus.RepositoryRoot(adrDir), out, errOut)
+}
+
+func RunWithRoot(args []string, adrDir, repoRoot string, out io.Writer, errOut io.Writer) error {
 	var (
 		explicitFiles []string
 		base          string
@@ -98,9 +103,31 @@ func Run(args []string, adrDir string, out io.Writer, errOut io.Writer) error {
 	}
 
 	// Determine repository root
-	repoRoot := "."
-	if customAdrDir != "" {
-		repoRoot = filepath.Dir(filepath.Dir(customAdrDir))
+	if repoRoot == "" {
+		repoRoot = "."
+	}
+	var discoverErr error
+	if customAdrDir == "" {
+		customAdrDir, discoverErr = corpus.Discover(repoRoot, false)
+	} else {
+		abs, e := filepath.Abs(customAdrDir)
+		if e != nil {
+			return e
+		}
+		rel, e := filepath.Rel(repoRoot, abs)
+		if e != nil {
+			return e
+		}
+		if e = corpus.ValidatePath(filepath.ToSlash(rel)); e != nil {
+			return e
+		}
+		if e = corpus.NoSymlinks(repoRoot, filepath.ToSlash(rel)); e != nil {
+			return e
+		}
+		discoverErr = corpus.Require(customAdrDir)
+	}
+	if discoverErr != nil {
+		return discoverErr
 	}
 	runner := OSGitRunner{Dir: repoRoot}
 
@@ -116,19 +143,6 @@ func Run(args []string, adrDir string, out io.Writer, errOut io.Writer) error {
 	if len(files) == 0 {
 		_, _ = fmt.Fprintln(out, "No files given/changed — nothing to resolve.")
 		return nil
-	}
-
-	// 2. Discover ADR directory if not provided
-	if customAdrDir == "" {
-		for _, candidate := range []string{filepath.Join(repoRoot, "doc/adr"), filepath.Join(repoRoot, "docs/adr")} {
-			if fi, sErr := os.Stat(candidate); sErr == nil && fi.IsDir() {
-				customAdrDir = candidate
-				break
-			}
-		}
-	}
-	if customAdrDir == "" {
-		return fmt.Errorf("adrian resolve: cannot find ADR directory (doc/adr or docs/adr)")
 	}
 
 	// 3. Load ADRs
@@ -199,11 +213,15 @@ func Run(args []string, adrDir string, out io.Writer, errOut io.Writer) error {
 		// Build refs for ADRs
 		for _, a := range allADRs {
 			canonical := "ADR-" + a.CanonicalID()
-			slug := filepath.Base(a.FilePath)
+			slug, relErr := filepath.Rel(repoRoot, a.FilePath)
+			if relErr != nil {
+				return relErr
+			}
+			slug = filepath.ToSlash(slug)
 			if repoURL != "" {
-				refs[canonical] = fmt.Sprintf("%s/doc/adr/%s", repoURL, slug)
+				refs[canonical] = fmt.Sprintf("%s/%s", repoURL, slug)
 			} else {
-				refs[canonical] = fmt.Sprintf("doc/adr/%s", slug)
+				refs[canonical] = slug
 			}
 		}
 
