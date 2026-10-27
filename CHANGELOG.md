@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.0](https://github.com/wbern/adrian/compare/v0.13.1...v0.14.0) (2026-10-27)
+
+
+### Features
+
+* **resolve:** add immutable bindings with native tag selection ([e7af66d](https://github.com/wbern/adrian/commit/e7af66dc2cd3f9a4e6b2d6f2601b006f07e80ed4))
+* **resolve:** add immutable bindings with native tag selection ([0f83ea0](https://github.com/wbern/adrian/commit/0f83ea0e12c63752b00b3a051e9572c9e3f7ab47))
+
 ## [0.13.1](https://github.com/wbern/adrian/compare/v0.13.0...v0.13.1) (2026-10-27)
 
 
