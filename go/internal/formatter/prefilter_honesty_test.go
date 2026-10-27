@@ -31,6 +31,7 @@ func TestCheckPreFilter_ReportsNotEvaluatedRatherThanPassed(t *testing.T) {
 	got := CheckPreFilter(skippableADR(), "+ some unrelated change\n")
 	if got == nil {
 		t.Fatal("expected a result for an ADR whose pre-filter terms are absent")
+		return
 	}
 	if got.Status == types.StatusPASS {
 		t.Error("Status = PASS for a rule that was never checked; an unevaluated rule must not be indistinguishable from an enforced one")
@@ -44,6 +45,7 @@ func TestCheckPreFilter_ClaimsNoConfidenceInAVerdictItNeverFormed(t *testing.T) 
 	got := CheckPreFilter(skippableADR(), "+ some unrelated change\n")
 	if got == nil {
 		t.Fatal("expected a result")
+		return
 	}
 	if got.Confidence != nil {
 		t.Errorf("Confidence = %v; no model ran, so there is no confidence to report", *got.Confidence)
@@ -54,6 +56,7 @@ func TestCheckPreFilter_ExplanationDoesNotAssertAbsenceOfViolations(t *testing.T
 	got := CheckPreFilter(skippableADR(), "+ some unrelated change\n")
 	if got == nil {
 		t.Fatal("expected a result")
+		return
 	}
 	if strings.Contains(strings.ToLower(got.Explanation), "no violations") {
 		t.Errorf("explanation asserts there are no violations, which was never established: %q", got.Explanation)
