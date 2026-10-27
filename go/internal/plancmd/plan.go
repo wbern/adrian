@@ -221,7 +221,7 @@ func (g gitReader) readPolicy(commit string) (reviewpolicy.Registry, []reviewpol
 		if len(parts) != 3 {
 			return registry, nil, fmt.Errorf("malformed policy tree header")
 		}
-		if file != reviewpolicy.RegistryPath && !(filepath.ToSlash(filepath.Dir(file)) == selected && corpus.Numbered.MatchString(filepath.Base(file))) {
+		if file != reviewpolicy.RegistryPath && (filepath.ToSlash(filepath.Dir(file)) != selected || !corpus.Numbered.MatchString(filepath.Base(file))) {
 			continue
 		}
 		if (parts[0] != "100644" && parts[0] != "100755") || parts[1] != "blob" || !commitID.MatchString(parts[2]) {
