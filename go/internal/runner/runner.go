@@ -122,9 +122,29 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 		}
 	}
 
-	allChangedFiles, exit, err := selectChangedFiles(opts, deps.Git, gitRoot, targetRef, log, suppliedDiff)
+	var changes []gitcontext.Change
+	if !opts.DiffSet && (opts.BranchSet || len(opts.Files) == 0) {
+		if opts.BranchSet {
+			changes, err = deps.Git.GetChangesAgainstMain(targetRef)
+		} else {
+			changes, err = deps.Git.GetStagedChanges()
+		}
+		if err != nil {
+			return 1, err
+		}
+	}
+	if opts.BranchSet && len(opts.Files) > 0 {
+		changes, err = filterBranchChanges(changes, opts.Files)
+		if err != nil {
+			return 1, err
+		}
+	}
+	allChangedFiles, exit, err := selectChangedFiles(opts, gitRoot, log, suppliedDiff, changes)
 	if exit != nil || err != nil {
-		return derefExit(exit), err
+		if err != nil {
+			return 1, err
+		}
+		return derefExit(exit), nil
 	}
 
 	if len(allChangedFiles) == 0 {
@@ -207,20 +227,20 @@ func Run(opts types.LintOptions, deps RunDeps) (int, error) {
 		pairs[i] = adrFiles{adr: a, files: matching}
 	}
 
-	getDiff := func(files []string, includeContext bool) string {
+	getDiff := func(files []string, includeContext bool) (string, error) {
 		switch {
 		case opts.DiffSet:
 			// includeContext is deliberately ignored: an ADR's diff_context
 			// asks git to widen the hunks, and we cannot widen a diff someone
 			// handed us. Pretending otherwise would silently under-deliver
 			// context to the ADRs that asked for it.
-			return sliceSuppliedDiff(suppliedDiff, files)
+			return sliceSuppliedDiff(suppliedDiff, files), nil
 		case opts.BranchSet:
-			return deps.Git.GetDiffAgainstMainForFiles(files, targetRef, includeContext)
+			return deps.Git.ReadDiffAgainstMainForFiles(gitcontext.ExpandChangePaths(changes, files), targetRef, includeContext)
 		case len(opts.Files) > 0:
-			return GenerateSyntheticDiffForFiles(files, gitRoot)
+			return GenerateSyntheticDiffForFiles(files, gitRoot), nil
 		default:
-			return deps.Git.GetStagedDiffForFiles(files, includeContext)
+			return deps.Git.ReadStagedDiffForFiles(gitcontext.ExpandChangePaths(changes, files), includeContext)
 		}
 	}
 
@@ -305,35 +325,53 @@ func derefExit(p *int) int {
 	return *p
 }
 
-func selectChangedFiles(opts types.LintOptions, git *gitcontext.Client, gitRoot, targetRef string, log *logger.Logger, supplied []diffstats.FileDiff) ([]string, *int, error) {
+// filterBranchChanges preserves change identities selected by either endpoint,
+// including an old path that no longer exists in the working tree.
+func filterBranchChanges(changes []gitcontext.Change, patterns []string) ([]gitcontext.Change, error) {
+	if len(patterns) == 0 {
+		return changes, nil
+	}
+	var selected []gitcontext.Change
+	literalPatterns := map[string]bool{}
+	for _, p := range gitcontext.ChangedPaths(changes) {
+		literalPatterns[p] = true
+	}
+	for _, change := range changes {
+		matched := false
+		for _, pattern := range patterns {
+			for _, p := range []string{change.OldPath, change.NewPath} {
+				if p == "" {
+					continue
+				}
+				if literalPatterns[pattern] {
+					matched = matched || p == pattern
+					continue
+				}
+				ok, e := doublestar.PathMatch(pattern, p)
+				if e != nil {
+					return nil, fmt.Errorf("glob %q: %w", pattern, e)
+				}
+				matched = matched || ok
+			}
+		}
+		if matched {
+			selected = append(selected, change)
+		}
+	}
+	return selected, nil
+}
+
+func selectChangedFiles(opts types.LintOptions, gitRoot string, log *logger.Logger, supplied []diffstats.FileDiff, changes []gitcontext.Change) ([]string, *int, error) {
 	switch {
 	case opts.DiffSet:
 		return changedFilesFromDiff(supplied)
 	case opts.BranchSet:
-		branchFiles := git.GetFilesChangedAgainstMain(targetRef)
-		if len(opts.Files) > 0 {
-			requested, err := expandGlobs(opts.Files, gitRoot)
-			if err != nil {
-				return nil, nil, err
-			}
-			requestedSet := make(map[string]struct{}, len(requested))
-			for _, f := range requested {
-				requestedSet[f] = struct{}{}
-			}
-			var filtered []string
-			for _, f := range branchFiles {
-				if _, ok := requestedSet[f]; ok {
-					filtered = append(filtered, f)
-				}
-			}
-			if len(filtered) == 0 {
-				log.Log("Specified files have no changes in branch mode.")
-				zero := 0
-				return nil, &zero, nil
-			}
-			return filtered, nil, nil
+		if len(opts.Files) > 0 && len(changes) == 0 {
+			log.Log("Specified files have no changes in branch mode.")
+			zero := 0
+			return nil, &zero, nil
 		}
-		return branchFiles, nil, nil
+		return gitcontext.ChangedPaths(changes), nil, nil
 	case len(opts.Files) > 0:
 		expanded, err := expandGlobs(opts.Files, gitRoot)
 		if err != nil {
@@ -350,7 +388,7 @@ func selectChangedFiles(opts types.LintOptions, git *gitcontext.Client, gitRoot,
 		}
 		return deduped, nil, nil
 	default:
-		return git.GetStagedFiles(), nil, nil
+		return gitcontext.ChangedPaths(changes), nil, nil
 	}
 }
 
@@ -398,7 +436,7 @@ func runOnePair(
 	a adr.ADR,
 	files []string,
 	opts types.LintOptions,
-	getDiff func([]string, bool) string,
+	getDiff func([]string, bool) (string, error),
 	getFileContent func(string) adr.FileRecord,
 	lintFn cache.LintFn,
 	cacheDir string,
@@ -414,7 +452,10 @@ func runOnePair(
 			CheckedFiles: files,
 		}
 	}
-	diff := getDiff(files, a.DiffContext)
+	diff, diffErr := getDiff(files, a.DiffContext)
+	if diffErr != nil {
+		return types.LintResult{ADR: a, Status: types.StatusERROR, Explanation: diffErr.Error(), CheckedFiles: files}
+	}
 
 	// --no-pre-filter is the control arm for pre_filter drift: it forces the
 	// model check even when the rule's terms are absent, so a skip that should

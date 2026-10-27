@@ -58,19 +58,20 @@ func changedFilesFromDiff(files []diffstats.FileDiff) ([]string, *int, error) {
 	seen := make(map[string]struct{}, len(files))
 	paths := make([]string, 0, len(files))
 	for _, f := range files {
-		p := f.NewPath
-		if p == "" {
-			p = f.OldPath
+		if f.OldPath == "" && f.NewPath == "" {
+			return nil, nil, fmt.Errorf("supplied diff contains a file section whose path could not be resolved: %s", firstLine(f.Text))
 		}
-		if p == "" {
-			return nil, nil, fmt.Errorf("supplied diff contains a file section whose path could not be resolved: %s",
-				firstLine(f.Text))
+		for _, p := range []string{f.OldPath, f.NewPath} {
+			if p == "" {
+				continue
+			}
+			if _, dup := seen[p]; dup {
+				continue
+			}
+			seen[p] = struct{}{}
+			paths = append(paths, p)
 		}
-		if _, dup := seen[p]; dup {
-			continue
-		}
-		seen[p] = struct{}{}
-		paths = append(paths, p)
+
 	}
 	sort.Strings(paths)
 	return paths, nil, nil
@@ -94,13 +95,12 @@ func sliceSuppliedDiff(files []diffstats.FileDiff, want []string) string {
 
 	var b strings.Builder
 	for _, f := range files {
-		p := f.NewPath
-		if p == "" {
-			p = f.OldPath
-		}
-		if _, ok := wanted[p]; ok {
+		_, oldWanted := wanted[f.OldPath]
+		_, newWanted := wanted[f.NewPath]
+		if oldWanted || newWanted {
 			b.WriteString(f.Text)
 		}
+
 	}
 	return b.String()
 }

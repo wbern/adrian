@@ -93,7 +93,7 @@ func (c *Client) getDiffRange(targetRef string) (string, error) {
 func (c *Client) getMergeBase(ref string) (string, error) {
 	for _, branch := range []string{"main", "origin/main", "master", "origin/master"} {
 		out, err := c.run([]string{"merge-base", ref, branch})
-		if err == nil {
+		if err == nil && strings.TrimSpace(out) != "" {
 			return strings.TrimSpace(out), nil
 		}
 	}
