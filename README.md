@@ -518,6 +518,29 @@ Missing input is refused rather than interpreted as proof of an empty review.
 Legacy ranking/filter options and positional files cannot be mixed into this
 immutable mode. Ordinary `resolve` and the `adr-lint` alias remain available.
 
+For a tag-selected immutable rulebook, opt in to the separate v2 format:
+
+```bash
+printf '%s\0' 'src/example.tsx' |
+  adrian resolve --repository owner/repository \
+    --base "$BASE" --head "$HEAD" --policy "$TRUSTED_POLICY" \
+    --paths0 --format bindings-json-v2 --tag ux
+```
+
+`adrian-bindings-v2` adds a fingerprinted `selection: {"kind":"tag","tag":"ux"}`
+identity. It selects accepted and proposed bindings by exact, case-sensitive tag
+membership and the same path scopes. The complete Git manifest and all-policy
+manifest remain intact. Every policy's tags are validated before selection,
+including retired and unmatched policies. Tags may be absent, an empty list, a
+string or a list of strings. Labels must be nonempty after trimming; control
+characters and non-string values are refused. The command-line tag must already
+be trimmed. Case and Unicode code points are preserved.
+
+An empty tag-selected rulebook does not establish review coverage or authorize a
+UX waiver. Consumers must pin the expected selection as well as the existing
+provenance. V1 refuses `--tag` and retains its original output and acceptance;
+`plan`, `code-plan` and ordinary advisory `resolve` keep their existing contracts.
+
 Originless repositories use an explicit adoption-configured identity such as
 `--repository local:engineering.workspace`. The stable ID has 1–128 lowercase
 ASCII letters, digits, dots, underscores or hyphens, starting with a letter or
