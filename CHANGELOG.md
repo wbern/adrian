@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.1](https://github.com/wbern/adrian/compare/v0.12.0...v0.12.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **corpus:** unify trusted discovery and preserve existing decisions ([59a0808](https://github.com/wbern/adrian/commit/59a0808611ddca288f823f8367f2bdd10a82c41a))
+* **corpus:** unify trusted discovery and preserve existing decisions ([31b0672](https://github.com/wbern/adrian/commit/31b0672e61faed1bea10dc81468c764ac781f8a6))
+
 ## [0.12.0](https://github.com/wbern/adrian/compare/v0.11.0...v0.12.0) (2026-10-24)
 
 
