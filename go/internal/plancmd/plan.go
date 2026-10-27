@@ -151,6 +151,11 @@ func (g gitReader) commit(ref string) (string, error) {
 }
 
 func (g gitReader) readPolicy(commit string) (reviewpolicy.Registry, []reviewpolicy.ADR, error) {
+	return g.readPolicyWithBodies(commit, nil)
+}
+
+// readPolicyWithBodies preserves exact trusted blobs for scope-only consumers.
+func (g gitReader) readPolicyWithBodies(commit string, bodies map[string][]byte) (reviewpolicy.Registry, []reviewpolicy.ADR, error) {
 	var registry reviewpolicy.Registry
 	// Configuration is policy: read it from the trusted commit, never the checkout.
 	configTree, err := g.run("ls-tree", "-z", "--full-tree", commit, "--", ":(literal)"+corpus.ConfigPath)
@@ -268,6 +273,12 @@ func (g gitReader) readPolicy(commit string) (reviewpolicy.Registry, []reviewpol
 		}
 		seen[a.ID] = true
 		policies = append(policies, a)
+		if bodies != nil {
+			if !utf8.Valid(contents) {
+				return registry, nil, fmt.Errorf("policy is not UTF-8: %s", item.path)
+			}
+			bodies[item.path] = contents
+		}
 	}
 	if err = reviewpolicy.ValidateSet(policies); err != nil {
 		return registry, nil, err

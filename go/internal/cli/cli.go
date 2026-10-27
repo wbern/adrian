@@ -104,9 +104,20 @@ func Run(name string, args []string, out, errOut io.Writer) int {
 		return 0
 	}
 	if len(args) > 0 && (args[0] == "resolve" || args[0] == "for-files") {
-		usage := "adrian resolve [files...] [--base <ref>] [--staged] [--tag <name>] [--ranked] [--top <N>] [--format text|json|pr-block]"
+		usage := "adrian resolve [files...] [--base <ref>] [--staged] [--tag <name>] [--ranked] [--top <N>] [--format text|json|pr-block]\n" + plancmd.BindingsUsage
 		if len(args) == 2 && (args[1] == "--help" || args[1] == "-h") {
 			fmt.Fprintln(out, strings.ReplaceAll(usage, "adrian", name))
+			return 0
+		}
+		if plancmd.IsBindingsMode(args[1:]) {
+			dir, err := os.Getwd()
+			if err == nil {
+				err = plancmd.RunBindingsCLI(args[1:], dir, os.Stdin, out)
+			}
+			if err != nil {
+				fmt.Fprintln(errOut, err)
+				return 1
+			}
 			return 0
 		}
 		git := gitcontext.NewDefaultClient()
