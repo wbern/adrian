@@ -51,12 +51,11 @@ type Plan struct {
 	ObligationFingerprint string        `json:"obligation_fingerprint"`
 }
 
-// Build requires validated policy and a complete Git change manifest. It sorts
-// all set-valued output so repeated runs produce identical JSON.
-func Build(provenance Provenance, changes []Change, policies []reviewpolicy.ADR, registry reviewpolicy.Registry) Plan {
-	p := Plan{Schema: 1, Provenance: provenance, Changes: append([]Change{}, changes...), Requirements: []Requirement{}, ApplicableADRs: []string{}, UnmatchedADRPaths: []string{}, UnclassifiedPaths: []string{}}
-	sort.Slice(p.Changes, func(i, j int) bool {
-		a, b := p.Changes[i], p.Changes[j]
+// SortChanges canonicalizes the Git manifest independently of local diff ordering.
+// Callers that must preserve their input should clone the slice first.
+func SortChanges(changes []Change) {
+	sort.Slice(changes, func(i, j int) bool {
+		a, b := changes[i], changes[j]
 		if a.Path != b.Path {
 			return a.Path < b.Path
 		}
@@ -65,6 +64,13 @@ func Build(provenance Provenance, changes []Change, policies []reviewpolicy.ADR,
 		}
 		return a.Status < b.Status
 	})
+}
+
+// Build requires validated policy and a complete Git change manifest. It sorts
+// all set-valued output so repeated runs produce identical JSON.
+func Build(provenance Provenance, changes []Change, policies []reviewpolicy.ADR, registry reviewpolicy.Registry) Plan {
+	p := Plan{Schema: 1, Provenance: provenance, Changes: append([]Change{}, changes...), Requirements: []Requirement{}, ApplicableADRs: []string{}, UnmatchedADRPaths: []string{}, UnclassifiedPaths: []string{}}
+	SortChanges(p.Changes)
 	paths := map[string]bool{}
 	for _, c := range changes {
 		paths[c.Path] = true

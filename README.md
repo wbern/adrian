@@ -475,3 +475,47 @@ change remains a successful no-op.
 that policy. This selection does not change existing plan output or fingerprints
 for repositories using only `doc/adr`. The `adr-lint` compatibility command uses
 the same discovery rules.
+
+### Immutable bindings for a selected review scope
+
+For a deployment-owned review consumer, resolve bindings against committed policy
+without materializing changed source files:
+
+```bash
+git diff --name-only -z "$BASE" "$HEAD" |
+  adrian resolve --repository owner/repository \
+    --base "$BASE" --head "$HEAD" --policy "$TRUSTED_POLICY" \
+    --paths0 --format bindings-json
+```
+
+This separate `adrian-bindings-v1` schema contains the complete final Git change
+manifest and its digest, an explicitly caller-selected path scope and digest,
+accepted and proposed bindings in separate arrays, exact policy bodies and SHA256
+digests, and immutable commit identities. The caller must independently authorize
+the repository identity, producer binary, policy revision and selected scope.
+The tool requires the policy commit to be in the base history and reads corpus
+configuration, the capability registry and all ADRs from that commit. Head or
+dirty-checkout policy cannot redirect it. Every ADR is validated, including
+unmatched records. This mode does not load dotenv or model providers.
+
+The selected scope can include intermediate fork-commit paths absent from the
+final net manifest. This preserves explicitly narrowed upstream-sync review
+scopes. Bindings describe applicable policy; they assert no source coverage,
+reviewer execution, or approval. Consumers retain responsibility for complete
+scope derivation, exclusions, evidence, head checks and publication gates.
+
+Input is nonempty, NUL-terminated UTF-8 with canonical repository-relative slash
+paths; paths are sorted and deduplicated. Input is limited to 4 MiB and 65,536
+records, and output retains the existing 64 MiB policy/manifest/output limits.
+Missing input is refused rather than interpreted as proof of an empty review.
+Legacy ranking/filter options and positional files cannot be mixed into this
+immutable mode. Ordinary `resolve` and the `adr-lint` alias remain available.
+
+Originless repositories use an explicit adoption-configured identity such as
+`--repository local:engineering.workspace`. The stable ID has 1–128 lowercase
+ASCII letters, digits, dots, underscores or hyphens, starting with a letter or
+digit. It is never inferred from a path, basename or remote. Output always binds
+`repository_kind` (`github` or `local`) and the complete repository identity into
+the fingerprint. GitHub publication consumers must refuse local artifacts; a
+local receipt consumer must match its explicitly configured project identity.
+Existing `plan` and `code-plan` schemas are unchanged.
