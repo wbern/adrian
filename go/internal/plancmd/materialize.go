@@ -86,8 +86,21 @@ func RunMaterializeCLI(args []string, out io.Writer) error {
 	if err := decoder.Decode(&plan); err != nil {
 		return fmt.Errorf("invalid code plan: %w", err)
 	}
-	if plan.Schema != "adrian-code-plan-v2" || plan.SharedDelivery == nil {
-		return fmt.Errorf("materialize requires a V2 shared code plan")
+	if plan.SharedDelivery == nil {
+		return fmt.Errorf("materialize requires a shared code plan")
+	}
+	switch plan.Schema {
+	case "adrian-code-plan-v2":
+		if _, present := fields["repository_kind"]; present {
+			return fmt.Errorf("repository_kind requires code-plan V3")
+		}
+	case CodeIdentitySchema:
+		_, present := fields["repository_kind"]
+		if !present || (plan.RepositoryKind != "github" && plan.RepositoryKind != "local") || bindingRepositoryKind(plan.Repository) != plan.RepositoryKind {
+			return fmt.Errorf("V3 repository_kind must match the declared repository identity")
+		}
+	default:
+		return fmt.Errorf("materialize requires a V2 or V3 shared code plan")
 	}
 	if plan.Fingerprint != values["--expected-plan-fingerprint"] {
 		return fmt.Errorf("code plan fingerprint differs from trusted expectation")
