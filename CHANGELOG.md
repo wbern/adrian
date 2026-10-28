@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.0](https://github.com/wbern/adrian/compare/v0.15.0...v0.16.0) (2026-10-28)
+
+
+### Features
+
+* **plan:** support explicit local repository identity ([d6cde85](https://github.com/wbern/adrian/commit/d6cde856059ce1e6e20fb6d5ac243d07b209f1ee))
+* **plan:** support explicit local repository identity ([7ce6700](https://github.com/wbern/adrian/commit/7ce67004021361b3139a1ea5c78e35730b431c68))
+
 ## [0.15.0](https://github.com/wbern/adrian/compare/v0.14.1...v0.15.0) (2026-10-28)
 
 
