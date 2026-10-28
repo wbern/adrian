@@ -239,12 +239,16 @@ func RunWithRoot(args []string, adrDir, repoRoot string, out io.Writer, errOut i
 		}
 		frontLoaded := make([]RankedRule, 0, headCount)
 		for i := 0; i < headCount; i++ {
-			frontLoaded = append(frontLoaded, rankResult.Ranked[i])
+			rule := rankResult.Ranked[i]
+			rule.ID = rankingRuleID(rule.ID)
+			// The frontload wire record uses buckets, not full path inventories.
+			rule.Files = nil
+			frontLoaded = append(frontLoaded, rule)
 		}
 
 		alsoApplies := make([]string, 0)
 		for _, r := range rankResult.Ranked[headCount:] {
-			alsoApplies = append(alsoApplies, r.ID)
+			alsoApplies = append(alsoApplies, rankingRuleID(r.ID))
 		}
 
 		advisory := make([]string, 0)
@@ -252,12 +256,9 @@ func RunWithRoot(args []string, adrDir, repoRoot string, out io.Writer, errOut i
 			advisory = append(advisory, "ADR-"+a.ID)
 		}
 
-		var neverFlaggedHere []Untriggered
+		neverFlaggedHere := make([]Untriggered, 0, len(rankResult.Untriggered))
 		for _, u := range rankResult.Untriggered {
-			id := u.ID
-			if !strings.HasPrefix(id, "ADR-") && !strings.HasPrefix(id, "lens#") {
-				id = "ADR-" + id
-			}
+			id := rankingRuleID(u.ID)
 			neverFlaggedHere = append(neverFlaggedHere, Untriggered{
 				ID:    id,
 				Title: u.Title,
@@ -401,6 +402,7 @@ func printRankedText(out io.Writer, record FrontloadRecord, allRanked []RankedRu
 	}
 	for i := 0; i < headCount; i++ {
 		r := allRanked[i]
+		r.ID = rankingRuleID(r.ID)
 		lastStr := ""
 		if r.LastSeen != nil && *r.LastSeen != "" {
 			lastStr = fmt.Sprintf(", last %s", *r.LastSeen)
@@ -423,7 +425,7 @@ func printRankedText(out io.Writer, record FrontloadRecord, allRanked []RankedRu
 	if len(lowerRanked) > 0 {
 		var ids []string
 		for _, r := range lowerRanked {
-			ids = append(ids, r.ID)
+			ids = append(ids, rankingRuleID(r.ID))
 		}
 		_, _ = fmt.Fprintf(out, "\n  Also applies, less often seen here: %s\n", strings.Join(ids, ", "))
 	}
@@ -431,7 +433,7 @@ func printRankedText(out io.Writer, record FrontloadRecord, allRanked []RankedRu
 	if len(untriggered) > 0 {
 		_, _ = fmt.Fprintln(out, "\n  Applies, but has never been flagged on these paths:")
 		for _, u := range untriggered {
-			_, _ = fmt.Fprintf(out, "    %s — %s\n", u.ID, u.Title)
+			_, _ = fmt.Fprintf(out, "    %s — %s\n", rankingRuleID(u.ID), u.Title)
 		}
 	}
 

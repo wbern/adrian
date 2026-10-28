@@ -63,4 +63,11 @@ pre-push:
   commands:
     tests:
       root: "go/"
-      run: go test ./...
+      run: |
+        # Hooks inherit the invoking worktree's Git environment. Tests create
+        # independent repositories and must resolve Git from their own cwd.
+        hook_git_env=$(git rev-parse --local-env-vars) || exit $?
+        for hook_git_var in $hook_git_env; do
+          unset "$hook_git_var" || exit $?
+        done
+        go test ./...

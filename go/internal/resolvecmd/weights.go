@@ -21,6 +21,56 @@ const (
 	StaleWarnDays       = 14
 )
 
+// decodeWeightsCache accepts the Node cache and the existing native cache.
+// A supplied total is required: missing evidence is not a zero-finding corpus.
+func decodeWeightsCache(data []byte, origin string) (*FindingWeightsData, error) {
+	var weights FindingWeightsData
+	if err := json.Unmarshal(data, &weights); err != nil {
+		return nil, err
+	}
+	if weights.Buckets == nil {
+		return nil, fmt.Errorf("finding cache requires a buckets object")
+	}
+	var totals struct {
+		Window struct {
+			Findings *int `json:"corpus_findings"`
+		} `json:"window"`
+		Corpus *struct {
+			Findings *int `json:"findings"`
+		} `json:"corpus"`
+	}
+	if err := json.Unmarshal(data, &totals); err != nil {
+		return nil, err
+	}
+	count := totals.Window.Findings
+	if totals.Corpus != nil {
+		if totals.Corpus.Findings == nil {
+			return nil, fmt.Errorf("finding cache corpus total is missing")
+		}
+		if count != nil && *count != *totals.Corpus.Findings {
+			return nil, fmt.Errorf("finding cache corpus totals disagree")
+		}
+		count = totals.Corpus.Findings
+	}
+	if count == nil || *count < 0 {
+		return nil, fmt.Errorf("finding cache requires a nonnegative known total")
+	}
+	if weights.Window.Days != nil && *weights.Window.Days < 0 {
+		return nil, fmt.Errorf("finding cache day count must be nonnegative")
+	}
+	if len(weights.Window.Newest) > 0 {
+		var newest *string
+		if err := json.Unmarshal(weights.Window.Newest, &newest); err != nil {
+			return nil, fmt.Errorf("finding cache newest must be a string or null: %w", err)
+		}
+	}
+	weights.Window.CorpusFindings = *count
+	weights.Window.Origin = origin
+	stale := true // Reading a cache/static file is not a fresh store query.
+	weights.Window.Stale = &stale
+	return &weights, nil
+}
+
 // LoadWeights tries to load weights from the cache file first, repo static file, or queries store if needed.
 func LoadWeights(repoRoot string) (*FindingWeightsData, error) {
 	cachePath := os.Getenv("REVIEW_WEIGHTS_CACHE")
@@ -43,10 +93,8 @@ func LoadWeights(repoRoot string) (*FindingWeightsData, error) {
 	// Try reading cache
 	data, err := os.ReadFile(cachePath)
 	if err == nil {
-		var weights FindingWeightsData
-		if jsonErr := json.Unmarshal(data, &weights); jsonErr == nil && len(weights.Buckets) > 0 {
-			weights.Window.Origin = "cache"
-			return &weights, nil
+		if weights, decodeErr := decodeWeightsCache(data, "cache"); decodeErr == nil {
+			return weights, nil
 		}
 	}
 
@@ -57,10 +105,8 @@ func LoadWeights(repoRoot string) (*FindingWeightsData, error) {
 		filepath.Join(repoRoot, "docs/adr/weights.json"),
 	} {
 		if sData, sErr := os.ReadFile(staticPath); sErr == nil {
-			var weights FindingWeightsData
-			if jsonErr := json.Unmarshal(sData, &weights); jsonErr == nil && len(weights.Buckets) > 0 {
-				weights.Window.Origin = "file"
-				return &weights, nil
+			if weights, decodeErr := decodeWeightsCache(sData, "file"); decodeErr == nil {
+				return weights, nil
 			}
 		}
 	}
@@ -144,7 +190,7 @@ func QueryStore(repoRoot string, windowDays int) (*FindingWeightsData, error) {
 		return nil, fmt.Errorf("finding weights not configured (no local cache or finding store)")
 	}
 
-	args := []string{"bd", "sql", "--rig", rig, "--json", sql}
+	args := []string{"bd", "--rig", rig, "--allow-unbounded", "sql", "--json", sql}
 
 	cmd := exec.CommandContext(ctx, "gc", args...)
 	cmd.Dir = repoRoot
@@ -153,25 +199,20 @@ func QueryStore(repoRoot string, windowDays int) (*FindingWeightsData, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		// If query with --rig failed or returned an error, and rig was set, try without --rig as fallback
-		if rig != "" {
-			cmdFallback := exec.CommandContext(ctx, "gc", "bd", "sql", "--json", sql)
-			cmdFallback.Dir = repoRoot
-			stdout.Reset()
-			stderr.Reset()
-			cmdFallback.Stdout = &stdout
-			cmdFallback.Stderr = &stderr
-			if err2 := cmdFallback.Run(); err2 != nil {
-				return nil, fmt.Errorf("gc bd sql: %w (%s)", err, stderr.String())
-			}
-		} else {
-			return nil, fmt.Errorf("gc bd sql: %w (%s)", err, stderr.String())
-		}
+		return nil, fmt.Errorf("gc bd sql for rig %s: %w (%s)", rig, err, stderr.String())
 	}
 
 	var rows []RawFindingRow
 	if err := json.Unmarshal(stdout.Bytes(), &rows); err != nil {
 		return nil, fmt.Errorf("decode sql result: %w", err)
+	}
+	if rows == nil {
+		return nil, fmt.Errorf("decode sql result: expected an array of finding rows")
+	}
+	for i, row := range rows {
+		if row.RuleID == "" || row.File == "" {
+			return nil, fmt.Errorf("decode sql result: finding row %d lacks rule_id or file", i)
+		}
 	}
 
 	return WeightsFromRows(rows, "store", since), nil
@@ -188,6 +229,7 @@ type bucketRuleStats struct {
 // WeightsFromRows aggregates raw findings into path buckets.
 func WeightsFromRows(rows []RawFindingRow, origin string, sinceDay string) *FindingWeightsData {
 	buckets := make(map[string]map[string]*bucketRuleStats)
+	observedDays := make(map[string]bool)
 	var (
 		earliestDay string
 		latestDay   string
@@ -230,6 +272,7 @@ func WeightsFromRows(rows []RawFindingRow, origin string, sinceDay string) *Find
 		}
 		ruleStats.findings++
 		if day != "" {
+			observedDays[day] = true
 			ruleStats.days[day] = true
 			if ruleStats.lastSeen == "" || day > ruleStats.lastSeen {
 				ruleStats.lastSeen = day
@@ -237,6 +280,10 @@ func WeightsFromRows(rows []RawFindingRow, origin string, sinceDay string) *Find
 		}
 	}
 
+	newest := json.RawMessage("null")
+	if latestDay != "" {
+		newest, _ = json.Marshal(latestDay)
+	}
 	if earliestDay == "" {
 		earliestDay = sinceDay
 	}
@@ -278,12 +325,17 @@ func WeightsFromRows(rows []RawFindingRow, origin string, sinceDay string) *Find
 		}
 	}
 
+	dayCount := len(observedDays)
+	stale := origin != "store"
 	return &FindingWeightsData{
 		Window: WeightsWindow{
 			From:           earliestDay,
 			To:             latestDay,
+			Days:           &dayCount,
+			Newest:         newest,
 			CorpusFindings: totalCount,
 			Origin:         origin,
+			Stale:          &stale,
 		},
 		Buckets: resultBuckets,
 	}
