@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.0](https://github.com/wbern/adrian/compare/v0.14.1...v0.15.0) (2026-10-28)
+
+
+### Features
+
+* **materialize:** expose pinned native fragment retrieval ([8a447d4](https://github.com/wbern/adrian/commit/8a447d44c3a6adedf5ac5bda577472f1a59bb1cf))
+* **materialize:** expose pinned native fragment retrieval ([dd3be5b](https://github.com/wbern/adrian/commit/dd3be5b6f3f6c5b21d808ce24fe11b7c50578d5a))
+
 ## [0.14.1](https://github.com/wbern/adrian/compare/v0.14.0...v0.14.1) (2026-10-28)
 
 
