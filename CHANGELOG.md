@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/wbern/adrian/compare/v0.16.0...v0.16.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **planexec:** bound raw transport and clean adapter groups ([#52](https://github.com/wbern/adrian/issues/52)) ([83ad3ca](https://github.com/wbern/adrian/commit/83ad3caf5e7442e0b0091972a093212ed0bb4ada))
+
 ## [0.16.0](https://github.com/wbern/adrian/compare/v0.15.0...v0.16.0) (2026-10-28)
 
 
