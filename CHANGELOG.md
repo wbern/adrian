@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.14.1](https://github.com/wbern/adrian/compare/v0.14.0...v0.14.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **hooks:** isolate temporary test repositories during pre-push ([d2735a4](https://github.com/wbern/adrian/commit/d2735a4c2d46cc9bf331819937d48ae23723487f))
+* **resolve:** preserve scoped ranked guidance and cache provenance ([6e1f1ee](https://github.com/wbern/adrian/commit/6e1f1ee1bbbbf986c6c082bb9cb405325309ac46))
+* **resolve:** preserve scoped ranked guidance and isolate hook tests ([a9d1e84](https://github.com/wbern/adrian/commit/a9d1e84ac8c2c9317384eac06bcff9c9a22cb753))
+
 ## [0.14.0](https://github.com/wbern/adrian/compare/v0.13.1...v0.14.0) (2026-10-27)
 
 
