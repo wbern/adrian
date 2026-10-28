@@ -224,7 +224,22 @@ rules and baseline paths, see [code-review coverage](doc/code-review-coverage.md
 The separate `code-plan` and opaque `execute-plan` commands do not publish
 review decisions or change the existing `plan` capability contract.
 
-Materialize one fragment from a default V2 code plan with independently trusted
+Code plans use the existing GitHub V2 schema by default. Explicit repository
+identity opts into `adrian-code-plan-v3`:
+
+```bash
+adrian code-plan --repository-kind local --repository local:gc-chat \
+  --base "$BASE" --head "$HEAD" --policy "$POLICY"
+```
+
+Use `--repository-kind github` with `owner/repo` for explicit GitHub identity.
+Local IDs have the form `local:<id>`: 1–128 lowercase ASCII letters, digits,
+dots, underscores or hyphens, starting with a letter or digit. The caller chooses
+the identity; ADRian does not infer it from an origin, directory or bead store.
+Omitting the kind preserves the existing V2 and `--legacy-packets` V1 behavior.
+Explicit identity cannot be combined with `--legacy-packets`.
+
+Materialize one fragment from a V2 or explicit-identity V3 code plan with independently trusted
 producer and shared-delivery fingerprints:
 
 ```bash
@@ -239,7 +254,9 @@ them from an untrusted input. The command accepts one bounded regular file
 (64 MiB plus the producer's final newline); stdin and legacy packet plans are
 not supported. It emits the existing native JSON envelope, preserving stored
 content and metadata without looking up repository files or invoking a model.
-Fragment integrity does not establish a complete assessment: consumers still
+The shared envelope describes content and can be identical across repository
+identities. Only the independently trusted outer plan fingerprint binds the
+repository kind and identity. Fragment integrity does not establish a complete assessment: consumers still
 must collect every required scope part and validate the review outcome.
 The compatibility command `adr-lint materialize` has the same behavior.
 

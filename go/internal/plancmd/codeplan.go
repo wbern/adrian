@@ -25,7 +25,8 @@ import (
 	"github.com/wbern/adrian/go/internal/sharedpacket"
 )
 
-const CodeUsage = "adrian code-plan --repository <owner/name> --base <ref> --head <ref> --policy <trusted-base-ref> [--legacy-packets] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--max-batches <n>] [--fanout-threshold-bytes <bytes>] [--fanout-threshold-segments <n>] [--max-plan-bytes <bytes>] [--config <path>]"
+const CodeUsage = "adrian code-plan --repository <owner/name|local:stable-id> --base <ref> --head <ref> --policy <trusted-base-ref> [--repository-kind github|local] [--legacy-packets] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--max-batches <n>] [--fanout-threshold-bytes <bytes>] [--fanout-threshold-segments <n>] [--max-plan-bytes <bytes>] [--config <path>]"
+const CodeIdentitySchema = "adrian-code-plan-v3"
 const defaultMaxCodePlanBytes int64 = 64 * 1024 * 1024
 
 // CodePlan is an immutable source inventory, not an assessment or approval.
@@ -38,6 +39,7 @@ type CodePlan struct {
 	ChangeDiffs    []ChangeDiffRecord      `json:"change_diffs,omitempty"`
 	Schema         string                  `json:"schema"`
 	Repository     string                  `json:"repository"`
+	RepositoryKind string                  `json:"repository_kind,omitempty"`
 	Coverage       reviewplan.CoveragePlan `json:"coverage"`
 	Content        []ContentRecord         `json:"content"`
 	Policies       []PolicyRecord          `json:"policies"`
@@ -69,6 +71,9 @@ func RunCode(args []string, adrDir string, out io.Writer) error {
 func RunCodeCLI(args []string, dir string, out io.Writer) error {
 	var (
 		repository              string
+		repositoryKind          string
+		repositoryKindSet       bool
+		repositoryOccurrences   int
 		legacy                  bool
 		budgetProfile           string
 		budgetMode              string
@@ -85,12 +90,20 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
+		case "--repository-kind":
+			if repositoryKindSet || i+1 >= len(args) || args[i+1] == "" || strings.HasPrefix(args[i+1], "--") {
+				return fmt.Errorf("repository kind must be specified once with a value; %s", CodeUsage)
+			}
+			repositoryKindSet = true
+			i++
+			repositoryKind = args[i]
 		case "--legacy-packets":
 			if legacy {
 				return fmt.Errorf("duplicate legacy packet option")
 			}
 			legacy = true
 		case "--repository":
+			repositoryOccurrences++
 			if repository != "" || i+1 >= len(args) {
 				return fmt.Errorf("repository must be specified once; %s", CodeUsage)
 			}
@@ -179,7 +192,14 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 			planArgs = append(planArgs, arg)
 		}
 	}
-	if !regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`).MatchString(repository) {
+	if repositoryKindSet {
+		if legacy {
+			return fmt.Errorf("explicit repository kind cannot use legacy packets")
+		}
+		if repositoryOccurrences != 1 || (repositoryKind != "github" && repositoryKind != "local") || bindingRepositoryKind(repository) != repositoryKind {
+			return fmt.Errorf("explicit repository kind requires one matching repository identity; %s", CodeUsage)
+		}
+	} else if !regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`).MatchString(repository) {
 		return fmt.Errorf("trusted repository owner/name required; %s", CodeUsage)
 	}
 	// Reuse the existing strict immutable reader and complete NUL manifest. No
@@ -206,6 +226,10 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 	}
 	coverage := reviewplan.BuildCoverage(semantic.Provenance, semantic.Changes, policies, registry)
 	p := CodePlan{Schema: "adrian-code-plan-v2", Repository: repository, Coverage: coverage, Content: []ContentRecord{}, Policies: []PolicyRecord{}}
+	if repositoryKindSet {
+		p.Schema = CodeIdentitySchema
+		p.RepositoryKind = repositoryKind
+	}
 	sourceTotal := 0
 	for _, v := range coverage.Baseline {
 		record, err := g.content(v)
