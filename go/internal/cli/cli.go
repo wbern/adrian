@@ -66,6 +66,17 @@ func Run(name string, args []string, out, errOut io.Writer) int {
 	if len(args) > 0 && (args[0] == "check" || args[0] == "review") {
 		args = args[1:]
 	}
+	if len(args) > 0 && args[0] == "materialize" {
+		if len(args) == 2 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Fprintln(out, strings.ReplaceAll(plancmd.MaterializeUsage, "adrian", name))
+			return 0
+		}
+		if err := plancmd.RunMaterializeCLI(args[1:], out); err != nil {
+			fmt.Fprintln(errOut, err)
+			return 1
+		}
+		return 0
+	}
 	// Plan commands resolve Git only through the sanitized immutable reader.
 	// Do not obtain their repository root through legacy environment-sensitive
 	// discovery or load the checkout's dotenv/provider configuration.
@@ -169,6 +180,7 @@ func Run(name string, args []string, out, errOut io.Writer) int {
 	commands["plan"] = dispatcher.Command{Run: plancmd.Run, Usage: plancmd.Usage}
 	commands["code-plan"] = dispatcher.Command{Run: plancmd.RunCode, Usage: plancmd.CodeUsage}
 	commands["execute-plan"] = dispatcher.Command{Run: planexec.RunCommand, Usage: planexec.Usage}
+	commands["materialize"] = dispatcher.Command{Usage: strings.ReplaceAll(plancmd.MaterializeUsage, "adrian", name)}
 	commands["resolve"] = dispatcher.Command{Usage: name + " resolve [files...] [--base <ref>] [--staged] [--tag <name>] [--ranked] [--top <N>] [--format text|json|pr-block]"}
 	commands["for-files"] = dispatcher.Command{Usage: name + " for-files [files...] [--base <ref>] [--staged] [--tag <name>] [--ranked] [--top <N>] [--format text|json|pr-block]"}
 	commands["finalize"] = dispatcher.Command{Usage: name + " finalize --plan <plan.json> --body-file <body.md> [--segments-covered <covered.json> | --receipts <receipts.json>] [--out-body <file>]"}

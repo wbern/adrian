@@ -224,6 +224,25 @@ rules and baseline paths, see [code-review coverage](doc/code-review-coverage.md
 The separate `code-plan` and opaque `execute-plan` commands do not publish
 review decisions or change the existing `plan` capability contract.
 
+Materialize one fragment from a default V2 code plan with independently trusted
+producer and shared-delivery fingerprints:
+
+```bash
+adrian materialize --plan code-plan.json \
+  --expected-plan-fingerprint "$TRUSTED_CODE_PLAN_FINGERPRINT" \
+  --expected-shared-fingerprint "$TRUSTED_SHARED_FINGERPRINT" \
+  --atom "$ATOM_ID"
+```
+
+Supply both expected fingerprints from the trusted consumer, rather than copying
+them from an untrusted input. The command accepts one bounded regular file
+(64 MiB plus the producer's final newline); stdin and legacy packet plans are
+not supported. It emits the existing native JSON envelope, preserving stored
+content and metadata without looking up repository files or invoking a model.
+Fragment integrity does not establish a complete assessment: consumers still
+must collect every required scope part and validate the review outcome.
+The compatibility command `adr-lint materialize` has the same behavior.
+
 ## Picking your first ADRs
 
 The single test that decides whether a decision belongs in an
