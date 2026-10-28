@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -229,25 +230,35 @@ func execute(ctx context.Context, plan reviewpacket.Plan, invoke Invoker, record
 }
 
 type limitedOutput struct {
-	bytes.Buffer
+	// A named buffer prevents io.Copy from using a promoted ReadFrom method
+	// that would bypass Write's output bound.
+	buffer   bytes.Buffer
 	limit    int
 	overflow bool
 	cancel   context.CancelFunc
 }
 
 func (b *limitedOutput) Write(raw []byte) (int, error) {
-	if len(raw) > b.limit-b.Len() {
+	if len(raw) > b.limit-b.buffer.Len() {
 		b.overflow = true
 		b.cancel()
 		return 0, fmt.Errorf("adapter output exceeds byte budget")
 	}
-	return b.Buffer.Write(raw)
+	return b.buffer.Write(raw)
 }
+func (b *limitedOutput) Bytes() []byte { return b.buffer.Bytes() }
+
 func invokeAdapter(ctx context.Context, path string, packet reviewpacket.Packet) ([]byte, error) {
 	payload, err := json.Marshal(packet)
 	if err != nil {
 		return nil, err
 	}
+	return invokeRawAdapter(ctx, path, payload)
+}
+
+// invokeRawAdapter transports opaque bytes. Its caller owns content authority,
+// attempt persistence and execution isolation; this is not a public unit API.
+func invokeRawAdapter(ctx context.Context, path string, payload []byte) (output []byte, err error) {
 	if len(payload) > maxRunBytes {
 		return nil, fmt.Errorf("packet input exceeds byte budget")
 	}
@@ -256,13 +267,30 @@ func invokeAdapter(ctx context.Context, path string, packet reviewpacket.Packet)
 	command := exec.CommandContext(child, path)
 	command.Stdin = bytes.NewReader(payload)
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	command.Cancel = func() error { return syscall.Kill(-command.Process.Pid, syscall.SIGKILL) }
+	command.Cancel = func() error { return terminateAdapterGroup(command) }
 	command.WaitDelay = time.Second
 	stdout := &limitedOutput{limit: maxResultBytes, cancel: cancel}
 	stderr := &limitedOutput{limit: 64 * 1024, cancel: cancel}
 	command.Stdout = stdout
 	command.Stderr = stderr
-	err = command.Run()
+	if err = command.Start(); err != nil {
+		return nil, fmt.Errorf("run adapter: %w", err)
+	}
+	defer func() {
+		// Setpgid allocated this command's group. Read Process only after
+		// successful Start; Cancel also reads that checked, published Process.
+		cleanupErr := terminateAdapterGroup(command)
+		if cleanupErr == nil || errors.Is(cleanupErr, syscall.ESRCH) {
+			return
+		}
+		output = nil
+		if err != nil {
+			err = fmt.Errorf("%w; cleanup adapter process group: %w", err, cleanupErr)
+		} else {
+			err = fmt.Errorf("cleanup adapter process group: %w", cleanupErr)
+		}
+	}()
+	err = command.Wait()
 	if stdout.overflow || stderr.overflow {
 		return nil, fmt.Errorf("adapter output exceeds byte budget")
 	}
@@ -270,6 +298,16 @@ func invokeAdapter(ctx context.Context, path string, packet reviewpacket.Packet)
 		return nil, fmt.Errorf("run adapter: %w", err)
 	}
 	return stdout.Bytes(), nil
+}
+
+// terminateAdapterGroup accepts only the group allocated by this invocation.
+// It does not discover processes or accept a group identifier from adapter data.
+func terminateAdapterGroup(command *exec.Cmd) error {
+	if command == nil || command.Process == nil || command.Process.Pid <= 1 ||
+		command.SysProcAttr == nil || !command.SysProcAttr.Setpgid || command.SysProcAttr.Pgid != 0 {
+		return fmt.Errorf("adapter has no invocation-owned process group")
+	}
+	return syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
 }
 
 func boundedFailure(err error) string {
