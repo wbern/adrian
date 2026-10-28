@@ -34,10 +34,13 @@ type LensRule struct {
 
 // WeightsWindow describes the observation window of the review findings corpus.
 type WeightsWindow struct {
-	From           string `json:"from"`
-	To             string `json:"to"`
-	CorpusFindings int    `json:"corpus_findings"`
-	Origin         string `json:"origin"` // "store" or "cache"
+	From           string          `json:"from"`
+	To             string          `json:"to"`
+	Days           *int            `json:"days,omitempty"`
+	Newest         json.RawMessage `json:"newest,omitempty"`
+	CorpusFindings int             `json:"corpus_findings"`
+	Origin         string          `json:"origin"` // "store", "cache" or "file"
+	Stale          *bool           `json:"stale,omitempty"`
 }
 
 // FindingWeightsEntry contains the historical frequency of a rule on a path bucket.

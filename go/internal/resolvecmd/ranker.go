@@ -75,6 +75,7 @@ func observedRules(weights *FindingWeightsData, buckets []string) map[string]*me
 			if r.ID == "" {
 				continue
 			}
+			r.ID = rankingRuleID(r.ID)
 			prev, exists := merged[r.ID]
 			daysActive := r.DaysActive
 			if exists && prev.daysActive > daysActive {
@@ -96,6 +97,20 @@ func observedRules(weights *FindingWeightsData, buckets []string) map[string]*me
 	return merged
 }
 
+// Ranking joins the resolver's bare ADR IDs with finding records' citation IDs.
+// Other rule namespaces, including legacy lenses, retain their own identity.
+func rankingRuleID(id string) string {
+	if len(id) != 4 {
+		return id
+	}
+	for _, c := range id {
+		if c < '0' || c > '9' {
+			return id
+		}
+	}
+	return "ADR-" + id
+}
+
 func isBurst(obs *mergedObservation) bool {
 	return obs.daysActive <= BurstDaysThreshold
 }
@@ -112,7 +127,7 @@ func RankRules(adrCandidates []ResolvedEntry, weights *FindingWeightsData, files
 	buckets := BucketsFor(files)
 	candidateMap := make(map[string]ResolvedEntry, len(adrCandidates))
 	for _, a := range adrCandidates {
-		candidateMap[a.ID] = a
+		candidateMap[rankingRuleID(a.ID)] = a
 	}
 
 	if weights == nil {
@@ -141,6 +156,7 @@ func RankRules(adrCandidates []ResolvedEntry, weights *FindingWeightsData, files
 		}
 
 		title := id
+		outputID := id
 		var ruleFiles []string
 		kind := "adr"
 		if isLens {
@@ -150,12 +166,13 @@ func RankRules(adrCandidates []ResolvedEntry, weights *FindingWeightsData, files
 			}
 		} else {
 			cand := candidateMap[id]
+			outputID = cand.ID
 			title = cand.Title
 			ruleFiles = cand.Files
 		}
 
 		ranked = append(ranked, RankedRule{
-			ID:         id,
+			ID:         outputID,
 			Title:      title,
 			Kind:       kind,
 			Bucket:     obs.Bucket,
@@ -175,8 +192,8 @@ func RankRules(adrCandidates []ResolvedEntry, weights *FindingWeightsData, files
 	sort.Slice(ranked, func(i, j int) bool {
 		a := ranked[i]
 		b := ranked[j]
-		obsA := observed[a.ID]
-		obsB := observed[b.ID]
+		obsA := observed[rankingRuleID(a.ID)]
+		obsB := observed[rankingRuleID(b.ID)]
 
 		burstA := isBurst(obsA)
 		burstB := isBurst(obsB)
@@ -189,7 +206,7 @@ func RankRules(adrCandidates []ResolvedEntry, weights *FindingWeightsData, files
 		if a.Findings != b.Findings {
 			return a.Findings > b.Findings
 		}
-		return a.ID < b.ID
+		return rankingRuleID(a.ID) < rankingRuleID(b.ID)
 	})
 
 	for i := range ranked {
@@ -198,12 +215,12 @@ func RankRules(adrCandidates []ResolvedEntry, weights *FindingWeightsData, files
 
 	rankedIDs := make(map[string]bool, len(ranked))
 	for _, r := range ranked {
-		rankedIDs[r.ID] = true
+		rankedIDs[rankingRuleID(r.ID)] = true
 	}
 
 	var untriggered []Untriggered
 	for _, a := range adrCandidates {
-		if !rankedIDs[a.ID] {
+		if !rankedIDs[rankingRuleID(a.ID)] {
 			untriggered = append(untriggered, Untriggered{
 				ID:    a.ID,
 				Title: a.Title,
