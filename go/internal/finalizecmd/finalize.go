@@ -24,6 +24,8 @@ var (
 type Plan struct {
 	Head             string           `json:"head"`
 	DiffID           string           `json:"diff_id"`
+	BaseOID          string           `json:"base_oid,omitempty"`
+	PathManifest     string           `json:"path_manifest,omitempty"`
 	Binding          []string         `json:"binding"`
 	PlanningError    string           `json:"planning_error,omitempty"`
 	ReviewScope      string           `json:"review_scope,omitempty"`
@@ -259,6 +261,18 @@ func Run(args []string, out, errOut io.Writer) error {
 		SummarySchemaVersion, plan.Head, plan.DiffID, finAdrScope, finBytesDone, finBytesTotal, finSegDone, SummarySchemaVersion,
 	)
 
+	if plan.BaseOID != "" || plan.PathManifest != "" {
+		base := plan.BaseOID
+		if base == "" {
+			base = "na"
+		}
+		manifest := plan.PathManifest
+		if manifest == "" {
+			manifest = "na"
+		}
+		fmt.Fprintf(&sb, "<!-- pr-review-plan: base=%s manifest=%s -->\n", base, manifest)
+	}
+
 	// Coverage ledger
 	fmt.Fprintf(&sb,
 		"\n<details>\n<summary>Coverage ledger</summary>\n\ncoverage ledger: %d/%d segments; %d/%d bytes.\n\n</details>\n",
@@ -304,7 +318,7 @@ func Run(args []string, out, errOut io.Writer) error {
 			if finVerdict == "approve" {
 				finVerdict = "request_changes"
 				sb.WriteString("\nverdict: request_changes (ESCALATED)\n")
-				fmt.Fprintf(&sb, "blocker | Architectural Consistency | (whole diff) | source: review-contract (review gates are pipeline steps, not prose) §Decision | evidence: the ADR corpus this review enforced was read from %s, which is %s", "corpus", plan.Corpus.State)
+				fmt.Fprintf(&sb, "blocker | Architectural Consistency | (whole diff) | source: ADR-0004 (crm: review gates are pipeline steps, not prose) §Decision | evidence: the ADR corpus this review enforced was read from %s, which is %s", "corpus", plan.Corpus.State)
 				if plan.Corpus.Behind > 0 {
 					fmt.Fprintf(&sb, " by %d commit(s)", plan.Corpus.Behind)
 				}
