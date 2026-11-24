@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/wbern/adrian/compare/v0.16.1...v0.17.0) (2026-11-24)
+
+
+### Features
+
+* **finalize:** emit pr-review-plan marker and cite ADR-0004 on corpus refusal ([#54](https://github.com/wbern/adrian/issues/54)) ([14ad780](https://github.com/wbern/adrian/commit/14ad78082c469ee4667e7562709046cb3c99dab3))
+
 ## [0.16.1](https://github.com/wbern/adrian/compare/v0.16.0...v0.16.1) (2026-10-28)
 
 
