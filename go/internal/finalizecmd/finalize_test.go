@@ -333,6 +333,9 @@ func TestFinalize_CorpusNotCurrentEscalation(t *testing.T) {
 	if !strings.Contains(finalBody, "the ADR corpus this review enforced was read from") {
 		t.Errorf("expected corpus refusal blocker in body:\n%s", finalBody)
 	}
+	if !strings.Contains(finalBody, "source: ADR-0004 (crm: review gates are pipeline steps, not prose) §Decision") {
+		t.Errorf("expected ADR-0004 citation in corpus refusal, got body:\n%s", finalBody)
+	}
 }
 
 func TestFinalize_HedgedVerdict(t *testing.T) {
@@ -386,5 +389,107 @@ func TestFinalize_HedgedVerdict(t *testing.T) {
 
 	if strings.TrimSpace(out.String()) != "request_changes" {
 		t.Errorf("expected stdout 'request_changes' for hedged verdict, got %q", out.String())
+	}
+}
+
+func TestFinalize_PlanMarker(t *testing.T) {
+	tests := []struct {
+		name         string
+		baseOID      string
+		pathManifest string
+		expectedLine string
+	}{
+		{
+			name:         "both present",
+			baseOID:      "base1234",
+			pathManifest: "mani5678",
+			expectedLine: "<!-- pr-review-plan: base=base1234 manifest=mani5678 -->",
+		},
+		{
+			name:         "only base present",
+			baseOID:      "base1234",
+			pathManifest: "",
+			expectedLine: "<!-- pr-review-plan: base=base1234 manifest=na -->",
+		},
+		{
+			name:         "only manifest present",
+			baseOID:      "",
+			pathManifest: "mani5678",
+			expectedLine: "<!-- pr-review-plan: base=na manifest=mani5678 -->",
+		},
+		{
+			name:         "neither present",
+			baseOID:      "",
+			pathManifest: "",
+			expectedLine: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			planFile := filepath.Join(tmp, "plan.json")
+			bodyFile := filepath.Join(tmp, "body.md")
+			coveredFile := filepath.Join(tmp, "covered.json")
+
+			isComplete := true
+			plan := map[string]any{
+				"head":          "0123456789abcdef",
+				"diff_id":       "feedbeef",
+				"base_oid":      tc.baseOID,
+				"path_manifest": tc.pathManifest,
+				"coverage_baseline": map[string]any{
+					"segments": 1,
+					"bytes":    1000,
+				},
+				"segments": []map[string]any{
+					{
+						"segment": 1,
+						"bytes":   1000,
+						"paths":   []string{"src/a.ts"},
+					},
+				},
+				"evidence_packet": map[string]any{
+					"complete": isComplete,
+				},
+				"corpus": map[string]any{
+					"state":      "current",
+					"behind":     0,
+					"ahead":      0,
+					"dirty_adrs": 0,
+				},
+			}
+			writeJSONFile(t, planFile, plan)
+			if err := os.WriteFile(bodyFile, []byte("verdict: approve\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			writeJSONFile(t, coveredFile, []int{1})
+
+			var out, errOut bytes.Buffer
+			err := finalizecmd.Run([]string{
+				"--plan", planFile,
+				"--body-file", bodyFile,
+				"--segments-covered", coveredFile,
+			}, &out, &errOut)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			finalContent, err := os.ReadFile(bodyFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			finalBody := string(finalContent)
+
+			if tc.expectedLine != "" {
+				if !strings.Contains(finalBody, tc.expectedLine) {
+					t.Errorf("expected marker %q in body, got:\n%s", tc.expectedLine, finalBody)
+				}
+			} else {
+				if strings.Contains(finalBody, "<!-- pr-review-plan:") {
+					t.Errorf("expected no pr-review-plan marker in body, got:\n%s", finalBody)
+				}
+			}
+		})
 	}
 }
