@@ -79,6 +79,42 @@ func TestPolicyRejectsInvalidMetadata(t *testing.T) {
 	}
 }
 
+func TestReviewMode(t *testing.T) {
+	r, err := ParseRegistry([]byte(registryFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name     string
+		modeYAML string
+		wantMode string
+		wantErr  bool
+	}{
+		{"default to model", "review: {requires: []}", "model", false},
+		{"explicit model", "review: {requires: [], mode: model}", "model", false},
+		{"explicit machine", "review: {requires: [], mode: machine}", "machine", false},
+		{"explicit hybrid", "review: {requires: [test-quality], mode: hybrid}", "hybrid", false},
+		{"invalid mode", "review: {requires: [], mode: automated}", "", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			adrYAML := "---\nstatus: accepted\napplies_to: ['**']\n" + tt.modeYAML + "\n---\n# Test\n"
+			p, err := ParseADR("doc/adr/0001-test.md", []byte(adrYAML), r)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for %s", tt.name)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for %s: %v", tt.name, err)
+			}
+			if p.Scopes[0].Review.Mode != tt.wantMode {
+				t.Fatalf("expected mode %q, got %q", tt.wantMode, p.Scopes[0].Review.Mode)
+			}
+		})
+	}
+}
+
 func TestRetiredADRsAndLifecycleIntegrity(t *testing.T) {
 	r, err := ParseRegistry([]byte(registryFixture))
 	if err != nil {

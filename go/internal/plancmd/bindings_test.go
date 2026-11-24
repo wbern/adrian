@@ -239,3 +239,55 @@ func TestBindingsIgnoreLocalDiffOrderFile(t *testing.T) {
 		return
 	}
 }
+
+func TestBindingsExcludeMachineChecked(t *testing.T) {
+	dir, _ := fixture(t)
+	write(t, dir, "doc/adr/0043-tokens.md", "---\nstatus: accepted\napplies_to:\n  - paths: ['src/**/*.css']\n    review: {requires: [], mode: machine}\n---\n# Machine Token\n")
+	write(t, dir, "doc/adr/0044-model.md", "---\nstatus: accepted\napplies_to:\n  - paths: ['src/**/*.tsx']\n    review: {requires: [], mode: model}\n---\n# Model Rule\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "add machine and model adrs")
+	base := git(t, dir, "rev-parse", "HEAD")
+	head := base
+	input := []byte("src/style.css\x00src/app.tsx\x00")
+
+	// Without --exclude-machine-checked: both ADR-0043 and ADR-0044 are returned
+	var out bytes.Buffer
+	args := []string{"--repository", "owner/repo", "--base", base, "--head", head, "--policy", base, "--paths0", "--format", "bindings-json"}
+	if err := RunBindingsCLI(args, dir, bytes.NewReader(input), &out); err != nil {
+		t.Fatal(err)
+	}
+	var p BindingsPlan
+	if err := json.Unmarshal(out.Bytes(), &p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Accepted) != 3 { // 0014 (from fixture) + 0043 + 0044
+		t.Fatalf("expected 3 accepted bindings, got %d", len(p.Accepted))
+	}
+
+	// With --exclude-machine-checked: ADR-0043 is excluded, ADR-0014 and ADR-0044 remain
+	out.Reset()
+	args = []string{"--repository", "owner/repo", "--base", base, "--head", head, "--policy", base, "--paths0", "--exclude-machine-checked", "--format", "bindings-json"}
+	if err := RunBindingsCLI(args, dir, bytes.NewReader(input), &out); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(out.Bytes(), &p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Accepted) != 2 { // 0014 + 0044
+		t.Fatalf("expected 2 accepted bindings with exclude-machine-checked, got %d", len(p.Accepted))
+	}
+	for _, b := range p.Accepted {
+		if b.ADR == "0043" {
+			t.Fatalf("expected ADR-0043 to be excluded, but was present: %+v", b)
+		}
+	}
+	found0044 := false
+	for _, b := range p.Accepted {
+		if b.ADR == "0044" {
+			found0044 = true
+		}
+	}
+	if !found0044 {
+		t.Fatal("expected ADR-0044 to remain included")
+	}
+}

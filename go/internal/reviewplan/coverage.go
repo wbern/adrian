@@ -18,6 +18,7 @@ type MatchedScope struct {
 	Source
 	ID                   string              `json:"id"`
 	ReviewDeclared       bool                `json:"review_declared"`
+	Mode                 string              `json:"mode,omitempty"`
 	Capabilities         []string            `json:"capabilities"`
 	EvidenceByCapability map[string][]string `json:"evidence_by_capability"`
 }
@@ -89,7 +90,7 @@ func BuildCoverage(provenance Provenance, changes []Change, policies []reviewpol
 			if len(matched) == 0 {
 				continue
 			}
-			row := MatchedScope{Source: Source{ADR: a.ID, File: a.File, Scope: fmt.Sprintf("%d", i+1), Paths: keys(matched), PolicyDigest: a.PolicyDigest}, ReviewDeclared: s.ReviewDeclared, Capabilities: union(s.Review.Requires), EvidenceByCapability: map[string][]string{}}
+			row := MatchedScope{Source: Source{ADR: a.ID, File: a.File, Scope: fmt.Sprintf("%d", i+1), Paths: keys(matched), PolicyDigest: a.PolicyDigest}, ReviewDeclared: s.ReviewDeclared, Mode: s.Review.Mode, Capabilities: union(s.Review.Requires), EvidenceByCapability: map[string][]string{}}
 			for _, capability := range row.Capabilities {
 				row.EvidenceByCapability[capability] = union(registry.Capabilities[capability].Evidence, s.Review.Evidence)
 			}

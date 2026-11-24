@@ -25,7 +25,7 @@ import (
 	"github.com/wbern/adrian/go/internal/sharedpacket"
 )
 
-const CodeUsage = "adrian code-plan --repository <owner/name|local:stable-id> --base <ref> --head <ref> --policy <trusted-base-ref> [--repository-kind github|local] [--legacy-packets] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--max-batches <n>] [--fanout-threshold-bytes <bytes>] [--fanout-threshold-segments <n>] [--max-plan-bytes <bytes>] [--config <path>]"
+const CodeUsage = "adrian code-plan --repository <owner/name|local:stable-id> --base <ref> --head <ref> --policy <trusted-base-ref> [--repository-kind github|local] [--legacy-packets] [--exclude-machine-checked] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--max-batches <n>] [--fanout-threshold-bytes <bytes>] [--fanout-threshold-segments <n>] [--max-plan-bytes <bytes>] [--config <path>]"
 const CodeIdentitySchema = "adrian-code-plan-v3"
 const defaultMaxCodePlanBytes int64 = 64 * 1024 * 1024
 
@@ -75,6 +75,7 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 		repositoryKindSet       bool
 		repositoryOccurrences   int
 		legacy                  bool
+		excludeMachineChecked   bool
 		budgetProfile           string
 		budgetMode              string
 		maxBatchBytes           int64
@@ -102,6 +103,8 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 				return fmt.Errorf("duplicate legacy packet option")
 			}
 			legacy = true
+		case "--exclude-machine-checked":
+			excludeMachineChecked = true
 		case "--repository":
 			repositoryOccurrences++
 			if repository != "" || i+1 >= len(args) {
@@ -225,6 +228,15 @@ func RunCodeCLI(args []string, dir string, out io.Writer) error {
 		return err
 	}
 	coverage := reviewplan.BuildCoverage(semantic.Provenance, semantic.Changes, policies, registry)
+	if excludeMachineChecked {
+		filtered := []reviewplan.MatchedScope{}
+		for _, row := range coverage.Applicability {
+			if row.Mode != "machine" {
+				filtered = append(filtered, row)
+			}
+		}
+		coverage.Applicability = filtered
+	}
 	p := CodePlan{Schema: "adrian-code-plan-v2", Repository: repository, Coverage: coverage, Content: []ContentRecord{}, Policies: []PolicyRecord{}}
 	if repositoryKindSet {
 		p.Schema = CodeIdentitySchema

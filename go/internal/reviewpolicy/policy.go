@@ -33,6 +33,7 @@ type Registry struct {
 type Review struct {
 	Requires []string `yaml:"requires"`
 	Evidence []string `yaml:"evidence,omitempty"`
+	Mode     string   `yaml:"mode,omitempty"`
 }
 
 type Scope struct {
@@ -237,7 +238,7 @@ func ValidateSet(policies []ADR) error {
 
 func parseReview(n *yaml.Node, r Registry) (Review, error) {
 	var review Review
-	if err := fields(n, "requires", "evidence"); err != nil {
+	if err := fields(n, "requires", "evidence", "mode"); err != nil {
 		return review, err
 	}
 	if value(n, "requires") == nil {
@@ -245,6 +246,18 @@ func parseReview(n *yaml.Node, r Registry) (Review, error) {
 	}
 	if err := n.Decode(&review); err != nil {
 		return review, err
+	}
+	if node := value(n, "mode"); node != nil {
+		if node.Kind != yaml.ScalarNode {
+			return review, fmt.Errorf("mode: must be a scalar string")
+		}
+		switch review.Mode {
+		case "model", "machine", "hybrid":
+		default:
+			return review, fmt.Errorf("review.mode must be one of: model, machine, hybrid (got %q)", review.Mode)
+		}
+	} else {
+		review.Mode = "model"
 	}
 	for _, key := range []string{"requires", "evidence"} {
 		if node := value(n, key); node != nil {
