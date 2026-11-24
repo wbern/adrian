@@ -365,3 +365,50 @@ func TestCodePlan_MaxBatchesAndCloudEconomy(t *testing.T) {
 		t.Errorf("expected 2 consolidated batches, got %d", len(plan.Budget.Batches))
 	}
 }
+
+func TestCodePlanExcludeMachineChecked(t *testing.T) {
+	dir, _ := fixture(t)
+	write(t, dir, "doc/adr/0043-tokens.md", "---\nstatus: accepted\napplies_to: ['src/**/*.css']\nreview: {requires: [], mode: machine}\n---\n# Machine Token\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "add machine adr")
+	base := git(t, dir, "rev-parse", "HEAD")
+	write(t, dir, "src/style.css", "body { color: red; }\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "add css file")
+	head := git(t, dir, "rev-parse", "HEAD")
+
+	// Without --exclude-machine-checked: ADR-0043 is included in Policies
+	var out bytes.Buffer
+	args := []string{"--base", base, "--head", head, "--policy", base, "--repository", "wbern/crm"}
+	if err := RunCodeCLI(args, dir, &out); err != nil {
+		t.Fatal(err)
+	}
+	var plan CodePlan
+	if err := json.Unmarshal(out.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	found0043 := false
+	for _, pol := range plan.Policies {
+		if pol.ADR == "0043" {
+			found0043 = true
+		}
+	}
+	if !found0043 {
+		t.Fatal("expected ADR-0043 to be present without flag")
+	}
+
+	// With --exclude-machine-checked: ADR-0043 is excluded from Policies
+	out.Reset()
+	args = []string{"--base", base, "--head", head, "--policy", base, "--repository", "wbern/crm", "--exclude-machine-checked"}
+	if err := RunCodeCLI(args, dir, &out); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(out.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	for _, pol := range plan.Policies {
+		if pol.ADR == "0043" {
+			t.Fatalf("expected ADR-0043 to be excluded with --exclude-machine-checked, got: %+v", pol)
+		}
+	}
+}

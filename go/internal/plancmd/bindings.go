@@ -17,7 +17,7 @@ import (
 	"github.com/wbern/adrian/go/internal/reviewpolicy"
 )
 
-const BindingsUsage = "adrian resolve --repository <owner/name|local:stable-id> --base <ref> --head <ref> --policy <trusted-base-ref> --paths0 --format bindings-json | --format bindings-json-v2 --tag <name>"
+const BindingsUsage = "adrian resolve --repository <owner/name|local:stable-id> --base <ref> --head <ref> --policy <trusted-base-ref> --paths0 [--exclude-machine-checked] --format bindings-json | --format bindings-json-v2 --tag <name>"
 const BindingsSchema = "adrian-bindings-v1"
 const TaggedBindingsSchema = "adrian-bindings-v2"
 const maxBindingsScopeBytes = 4 * 1024 * 1024
@@ -72,7 +72,7 @@ type BindingsPlan struct {
 func IsBindingsMode(args []string) bool {
 	for i, arg := range args {
 		switch strings.SplitN(arg, "=", 2)[0] {
-		case "--repository", "--head", "--policy", "--paths0":
+		case "--repository", "--head", "--policy", "--paths0", "--exclude-machine-checked":
 			return true
 		}
 		if arg == "--format" && i+1 < len(args) && (args[i+1] == "bindings-json" || args[i+1] == "bindings-json-v2") {
@@ -106,7 +106,7 @@ func parseBindingsArgs(args []string) (map[string]string, error) {
 			return nil, fmt.Errorf("%s must be specified once", key)
 		}
 		switch key {
-		case "--paths0":
+		case "--paths0", "--exclude-machine-checked":
 			values[key] = "true"
 		case "--repository", "--base", "--head", "--policy", "--format", "--tag":
 			i++
@@ -256,6 +256,7 @@ func RunBindingsCLI(args []string, dir string, in io.Reader, out io.Writer) erro
 			tagsByFile[policy.File] = tags
 		}
 	}
+	excludeMachineChecked := opts["--exclude-machine-checked"] == "true"
 	p := BindingsPlan{Schema: BindingsSchema, Repository: opts["--repository"], RepositoryKind: bindingRepositoryKind(opts["--repository"]), Provenance: reviewplan.Provenance{BaseCommit: base, MergeBase: mergeBase, HeadCommit: head, PolicyCommit: policy}, Changes: changes, Scope: SelectedScope{Kind: "caller-selected-paths", Paths: paths}, PolicyManifest: []reviewplan.PolicyIdentity{}, Accepted: []PolicyBinding{}, Proposed: []PolicyBinding{}}
 	if opts["--format"] == "bindings-json-v2" {
 		p.Schema = TaggedBindingsSchema
@@ -291,6 +292,7 @@ func RunBindingsCLI(args []string, dir string, in io.Reader, out io.Writer) erro
 			}
 		}
 		binding := PolicyBinding{PolicyRecord: PolicyRecord{ADR: a.ID, Path: a.File, Content: string(bodies[a.File]), SHA256: a.PolicyDigest}, Status: a.Status, Matches: []BindingScope{}}
+		hasReviewableScope := false
 		for index, scope := range a.Scopes {
 			matched := []string{}
 			for _, file := range paths {
@@ -300,9 +302,15 @@ func RunBindingsCLI(args []string, dir string, in io.Reader, out io.Writer) erro
 			}
 			if len(matched) > 0 {
 				binding.Matches = append(binding.Matches, BindingScope{Scope: fmt.Sprintf("%d", index+1), Paths: matched})
+				if !scope.ReviewDeclared || scope.Review.Mode != "machine" {
+					hasReviewableScope = true
+				}
 			}
 		}
 		if len(binding.Matches) == 0 {
+			continue
+		}
+		if excludeMachineChecked && !hasReviewableScope {
 			continue
 		}
 		if a.Status == "accepted" {

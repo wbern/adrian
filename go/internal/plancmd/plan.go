@@ -20,7 +20,7 @@ import (
 	"github.com/wbern/adrian/go/internal/reviewpolicy"
 )
 
-const Usage = "adrian plan --base <ref> --head <ref> --policy <trusted-base-ref> [--format json] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--max-batches <n>] [--fanout-threshold-bytes <bytes>] [--max-plan-bytes <bytes>] [--config <path>]"
+const Usage = "adrian plan --base <ref> --head <ref> --policy <trusted-base-ref> [--exclude-machine-checked] [--format json] [--budget-profile <profile>] [--budget-mode <mode>] [--max-batch-bytes <bytes>] [--max-batch-segments <n>] [--max-batches <n>] [--fanout-threshold-bytes <bytes>] [--max-plan-bytes <bytes>] [--config <path>]"
 
 func Run(args []string, adrDir string, out io.Writer) error {
 	return RunCLI(args, corpus.RepositoryRoot(adrDir), out)
@@ -94,6 +94,13 @@ func parseArgs(args []string) (map[string]string, error) {
 	values := map[string]string{}
 	for i := 0; i < len(args); i++ {
 		flag := args[i]
+		if flag == "--exclude-machine-checked" {
+			if _, ok := values[flag]; ok {
+				return nil, fmt.Errorf("%s must be specified once", flag)
+			}
+			values[flag] = "true"
+			continue
+		}
 		switch flag {
 		case "--base", "--head", "--policy", "--format",
 			"--budget-profile", "--budget-mode", "--max-batch-bytes",
