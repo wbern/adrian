@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.0](https://github.com/wbern/adrian/compare/v0.17.0...v0.18.0) (2026-11-24)
+
+
+### Features
+
+* **review:** support review.mode and --exclude-machine-checked flag ([#56](https://github.com/wbern/adrian/issues/56)) ([0b7cb46](https://github.com/wbern/adrian/commit/0b7cb4615ae3eb6810fb36ca1ac94b252e338fce))
+
 ## [0.17.0](https://github.com/wbern/adrian/compare/v0.16.1...v0.17.0) (2026-11-24)
 
 
